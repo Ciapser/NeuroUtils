@@ -8,6 +8,7 @@ from tqdm import tqdm
 import random
 from scipy.ndimage import rotate
 import math
+import pandas as pd
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -335,6 +336,79 @@ class ImageProcessing:
             return np.array(img/255 , dtype = img_type)
         
         
+
+class General:
+    def Load_model_check_training_progress(model , train , model_weights_directory, model_history_directory):
+        starting_epoch = None
+        if train:
+            try:
+                Model_history = pd.read_csv(model_history_directory)
+                starting_epoch = Model_history["epoch"].iloc[-1]
+                best_val_acc = Model_history["val_accuracy"].idxmax()
+                
+                best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
+                best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
+        
+                print("Found existing model trained for ",starting_epoch," epochs")
+                print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_acc,)
+                
+                print("Do you want to continue training? \nType 'y' for yes and 'n' for no \n")
+                user_input = input()
+        
+                while True:
+                    if user_input.lower() =="y":
+                        print("Continuing model training")
+                        print("Loading trained weights to model...")
+                        model.load_weights(model_weights_directory)
+                        break
+                    elif user_input.lower() =="n":
+                        starting_epoch = 0
+                        print("Model will be trained from scratch")
+                        break
+                    else:
+                        print("Invalid input. Enter 'y' or 'n' ")
+                
+                
+
+                
+        
+                
+                
+            except:
+                starting_epoch = 0
+                print("Could not load model weights")
+                
+           
+        else:
+        
+            try:
+                print("Loading trained weights to model and its training history...")
+                Model_history = pd.read_csv(model_history_directory)
+                model.load_weights(model_weights_directory)
+                
+                
+                      
+            except:
+                starting_epoch = 0
+                print("Could not load model weights and model history\n")
+                print("Do you want to train model now?\nType 'y' for yes, 'n' for no\n")
+                user_input = input()
+                while True:
+                    if user_input.lower() =="y":
+                        train = True
+                        print("Starting model training")
+                        break
+                    elif user_input.lower() =="n":
+                        train = False
+                        print("Model training skipped")
+                        break
+                    else:
+                        print("Invalid input. Enter 'y' or 'n' ")
+                    
+                
+        return model , train , starting_epoch
+
+
         
   
         
