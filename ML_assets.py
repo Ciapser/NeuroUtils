@@ -7,8 +7,10 @@ import tensorflow as tf
 from tqdm import tqdm
 import random
 from scipy.ndimage import rotate
-import math
 import pandas as pd
+import matplotlib.pyplot as plt
+import sklearn as skl
+import itertools
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -338,6 +340,7 @@ class ImageProcessing:
         
 
 class General:
+    
     def Load_model_check_training_progress(model , train , model_weights_directory, model_history_directory):
         starting_epoch = None
         if train:
@@ -410,7 +413,94 @@ class General:
 
 
         
-  
+    
+    def Model_training_history_plot_CSV(Model_training_history):
+        try:
+            Model_training_history.drop(columns=['epoch'], inplace=True)
+        except:
+            pass
+
+        
+        
+        column_list = Model_training_history.columns.tolist()
+        columns_score = [col for col in column_list if 'loss' not in col]
+        val_score = [col for col in columns_score if 'val' in col]
+        score = [col for col in columns_score if 'val' not in col]
+        special_characters = ",[!@#$%^&*()_+{}|:\"<>?-=[]\;',./"
+
+        cleaned_score_title = ''.join(char for char in score if char not in special_characters)
+        cleaned_val_score_title = ''.join(char for char in val_score if char not in special_characters)
+        
+        plt.style.use('ggplot') 
+        plt.figure(figsize = (10,5))
+        plt.suptitle("Model training history")
+
+        
+        plt.subplot(1,2,1)
+        plt.title(cleaned_score_title)
+        plt.plot(Model_training_history[score] ,label = cleaned_score_title , c = "red" )
+        plt.plot(Model_training_history[val_score] ,label = cleaned_val_score_title , c = "green" )
+        plt.legend(loc = "lower right")
+        plt.xlabel("Epoch")
+        
+        
+        plt.subplot(1,2,2)
+        plt.title("loss")
+        plt.plot(Model_training_history["loss"] ,label = "loss" , c = "red" )
+        plt.plot(Model_training_history["val_loss"] ,label = "val_loss" , c = "green" )
+        plt.legend(loc = "upper right")
+        plt.xlabel("Epoch")
+        
+
+        # Show the plot
+        plt.show()
+        plt.style.use('default') 
+
+
+    def Conf_matrix_classification(y_test, y_pred, dictionary, normalize=False):
+        """
+        This function prints and plots the confusion matrix.
+        Normalization can be applied by setting `normalize=True`.
+        """
+        # Create confusion matrix and normalize it over predicted (columns)
+        cm = skl.metrics.confusion_matrix(np.argmax(y_test, axis=1), np.argmax(y_pred, axis=1))
+        
+        # Visualize confusion matrix
+        classes = [x[1] for x in dictionary]
+        classes = [x.split('.')[0] for x in classes]
+        
+        
+        
+        if normalize:
+            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            print("Normalized confusion matrix")
+        else:
+            print('Confusion matrix, without normalization')
+        cm = np.around(cm, 2)
+        
+        
+        plt.imshow(cm, interpolation='nearest', cmap="BuGn")
+        plt.title("Confusion matrix")
+        plt.colorbar()
+        tick_marks = np.arange(len(classes))
+        plt.xticks(tick_marks, classes, rotation=45)
+        plt.yticks(tick_marks, classes)
+        
+        
+        thresh = cm.max() / 2.
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            plt.text(j, i, cm[i, j],
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        
+        plt.ylabel('True label')
+        plt.xlabel('Predicted label')
+        plt.tight_layout()
+        plt.show()
+
+
+        
+
         
 class Architectures():
     
