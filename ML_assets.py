@@ -707,6 +707,7 @@ class Architectures():
             d4 = cnn_block(d3,192  , kernel_size = 3 , block_layers = 3)
             
             d5 = cnn_block(d4 , 256  , kernel_size = 3 , block_layers = 3)
+            d5 = tf.keras.layers.MaxPooling2D((2,2))(d5)
             
             d6 = cnn_block(d5 , 384  , kernel_size = 3 , block_layers = 4)
 
