@@ -713,7 +713,7 @@ class Architectures():
 
 
             
-            e0 = tf.keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(2, 2), padding='same')(p0)
+            e0 = tf.keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(4, 4), padding='same')(p0)
           
             e0 = tf.keras.layers.BatchNormalization()(e0)
             e0 = Swish(e0)
