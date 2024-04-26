@@ -424,13 +424,23 @@ class General:
         
         column_list = Model_training_history.columns.tolist()
         columns_score = [col for col in column_list if 'loss' not in col]
-        val_score = [col for col in columns_score if 'val' in col]
-        score = [col for col in columns_score if 'val' not in col]
-        special_characters = ",[!@#$%^&*()_+{}|:\"<>?-=[]\;',./"
+        val_score = [col for col in columns_score if 'val' in col][0]
+        score = [col for col in columns_score if 'val' not in col][0]
+        special_characters = ",[!@#$%^&*()+{}|:\"<>?-=[]\;',./"
 
         cleaned_score_title = ''.join(char for char in score if char not in special_characters)
         cleaned_val_score_title = ''.join(char for char in val_score if char not in special_characters)
+
+        val_max = Model_training_history[val_score].idxmax()
+
         
+        val_loss_min = Model_training_history["val_loss"].idxmin()
+
+
+
+
+
+
         plt.style.use('ggplot') 
         plt.figure(figsize = (10,5))
         plt.suptitle("Model training history")
@@ -443,6 +453,9 @@ class General:
         plt.legend(loc = "lower right")
         plt.xlabel("Epoch")
         
+        plt.axvline(x = val_max , color = "blue" , linestyle = "--" ,label = "test")
+        plt.text(val_max, plt.ylim()[1], f'Max {cleaned_val_score_title} in: {val_max} epoch\n{cleaned_val_score_title}: {round(Model_training_history[cleaned_val_score_title][val_max],3)}', verticalalignment='bottom', horizontalalignment='left', color='blue')
+        
         
         plt.subplot(1,2,2)
         plt.title("loss")
@@ -451,6 +464,8 @@ class General:
         plt.legend(loc = "upper right")
         plt.xlabel("Epoch")
         
+        plt.axvline(x = val_loss_min , color = "blue" , linestyle = "--")
+        plt.text(val_loss_min, plt.ylim()[1], f'Min val_loss in: {val_loss_min} epoch\nVal loss: {round(Model_training_history["val_loss"][val_loss_min],3)}', verticalalignment='bottom', horizontalalignment='left', color='blue')
 
         # Show the plot
         plt.show()
@@ -495,7 +510,6 @@ class General:
         
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
-        plt.tight_layout()
         plt.show()
 
 
