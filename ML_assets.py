@@ -34,7 +34,7 @@ class DataSets:
     
     
     
-    def Create_Img_Classification_DataSet(Data_directory , img_H , img_W ,Save_directory, grayscale = False , r_value = 1.4 , reduced = False , samples_per_class = 1000):
+    def Create_Img_Classification_DataSet(Data_directory , img_H , img_W ,Save_directory, grayscale = False , r_value = 1.4 , reduced = False):
 
         
         
@@ -107,7 +107,9 @@ class DataSets:
                         width_size = img_W
                         height_size = round(img.shape[0]*width_percentage)
                     else:
-                        pass
+                        width_size = img_W
+                        height_size = img_H
+                        
                         
                     
                     #Take random crop of the image with preserved resolution and aspect ratio (part of image is just cutted off)
@@ -128,9 +130,10 @@ class DataSets:
             
                     
                 #If file is damaged or broken then it occurs
-                except Exception:
+                except Exception as e:
                     #Print Exception
                     print("\nCould not load file: ", image)
+                    print(e)
                     
 
         
@@ -768,6 +771,137 @@ class Architectures():
             #Return model
             return model
         
+        @staticmethod
+        def AnimalNet_v32_01(shape , n_classes):
+            img_H , img_W , channels = shape
+            #Functions of network:
+                
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)    
+                
+                
+            def cnn_block(input_layer , expand_filters , squeeze_filters = None ,kernel_size = 3, block_layers=3):
+                if squeeze_filters is None:
+                    squeeze_filters = expand_filters //4
+                   
+                x = input_layer
+                for i in range(block_layers):
+                    x_origin = x
+
+                    x = tf.keras.layers.Conv2D(expand_filters, (1, 1), padding='same')(x)
+                    x = tf.keras.layers.BatchNormalization()(x)
+                    x = Swish(x)
+                        
+                    
+                    x = tf.keras.layers.DepthwiseConv2D((kernel_size,kernel_size), padding = 'same')(x)
+                    x = tf.keras.layers.BatchNormalization()(x)
+                    x = Swish(x)
+                    
+                    x = tf.keras.layers.Conv2D(squeeze_filters , (1,1), padding = 'same')(x)
+                    x = tf.keras.layers.BatchNormalization()(x)
+
+
+                    
+                    x = tf.keras.layers.concatenate([x , x_origin])
+                    x = tf.keras.layers.SpatialDropout2D(0.1)(x)
+                    #x = tf.keras.layers.Add()([x , x_origin])
+                
+                if i >= block_layers-1:
+                    # Ensure spatial dimensions match before concatenation
+                    #input_layer = tf.keras.layers.Conv2D(filters //2, (1, 1), padding='same')(input_layer)            
+                    x_merged = tf.keras.layers.concatenate([x , input_layer]) 
+                    
+                    x_merged = tf.keras.layers.Conv2D(expand_filters, (1, 1), padding='same')(x_merged)
+                    x_merged = tf.keras.layers.BatchNormalization()(x_merged)
+                    x_merged = Swish(x_merged)
+                    
+                    x_merged = tf.keras.layers.DepthwiseConv2D((kernel_size,kernel_size), padding = 'same')(x_merged)
+                    x_merged = tf.keras.layers.BatchNormalization()(x_merged)
+                    x_merged = Swish(x_merged)
+
+                    x_merged = tf.keras.layers.Conv2D(squeeze_filters, (1, 1), padding='same')(x_merged)
+                    x_merged = tf.keras.layers.BatchNormalization()(x_merged)
+                    x_merged = Swish(x_merged)
+                    
+                    x_merged = tf.keras.layers.SpatialDropout2D(0.1)(x_merged)
+                
+                return x_merged
+            
+
+
+            #Inputs
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            #########################################################
+            #########################################################
+            
+            p0 = tf.keras.layers.Conv2D(64,(5,5) , padding = 'same')(inputs)
+            p0 = tf.keras.layers.BatchNormalization()(p0)
+            p0 = Swish(p0)
+            
+            
+            
+            
+            
+            
+            d1 = cnn_block(p0 , 64  , kernel_size = 3 , block_layers = 3)
+            
+            d2 = cnn_block(d1,96  , kernel_size = 3 , block_layers = 5)
+            d2 = tf.keras.layers.MaxPooling2D((2,2))(d2)
+            
+            d3 = cnn_block(d2,128  , kernel_size = 3 , block_layers = 5)
+            #d3 = tf.keras.layers.MaxPooling2D((2,2))(d3)
+            
+            d4 = cnn_block(d3,192  , kernel_size = 3 , block_layers = 3)
+            
+            d5 = cnn_block(d4 , 256  , kernel_size = 3 , block_layers = 3)
+            d5 = tf.keras.layers.MaxPooling2D((2,2))(d5)
+            
+            d6 = cnn_block(d5 , 512  , kernel_size = 3 , block_layers = 4)
+
+
+            
+            e0 = tf.keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(4, 4), padding='same')(p0)
+          
+            e0 = tf.keras.layers.BatchNormalization()(e0)
+            e0 = Swish(e0)
+            
+            
+            e1 = tf.keras.layers.concatenate([d6,e0])
+            
+            e1 = cnn_block(e1 , 256 , 64 , kernel_size = 3 , block_layers = 2)
+
+            
+            
+            
+            e2 = tf.keras.layers.GlobalAveragePooling2D()(e1)
+            
+            e3 = tf.keras.layers.Dense(1024)(e2)
+            e3 = Swish(e3)
+            e3 = tf.keras.layers.BatchNormalization()(e3)
+            e3 = tf.keras.layers.Dropout(0.2)(e3)
+            
+            e4 = tf.keras.layers.Dense(512)(e3)
+            e4 = Swish(e4)
+            e4 = tf.keras.layers.BatchNormalization()(e4)
+            e4 = tf.keras.layers.Dropout(0.5)(e4)
+            
+            e5 = tf.keras.layers.Dense(256)(e4)
+            e5 = Swish(e5)
+            e5 = tf.keras.layers.BatchNormalization()(e5)
+            e5 = tf.keras.layers.Dropout(0.4)(e5)
+            
+            
+            #########################################################
+            #########################################################
+            #Outputs 
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(e5)
+            # Define the model
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            
+            #Return model
+            return model
+
+
 
         @staticmethod
         def StupidNet(shape , n_classes):
@@ -790,21 +924,21 @@ class Architectures():
             c2 = tf.keras.layers.BatchNormalization()(c2)
             c2 = tf.keras.layers.LeakyReLU()(c2)
             c2 = tf.keras.layers.Dropout(0.05)(c2)
-            c2 = tf.keras.layers.MaxPooling2D((3,3))(c2)
+            #c2 = tf.keras.layers.MaxPooling2D((3,3))(c2)
 
 
             c3 = tf.keras.layers.Conv2D(256, (3,3), padding ="same")(c2)
             c3 = tf.keras.layers.BatchNormalization()(c3)
             c3 = tf.keras.layers.LeakyReLU()(c3)
             c3 = tf.keras.layers.Dropout(0.05)(c3)
-            c3 = tf.keras.layers.MaxPooling2D((2,2))(c3)
+           # c3 = tf.keras.layers.MaxPooling2D((2,2))(c3)
 
 
             k1 = tf.keras.layers.Conv2D(128, (3,3), padding ="same")(c3)
             k1 = tf.keras.layers.BatchNormalization()(k1)
             k1 = tf.keras.layers.LeakyReLU()(k1)
             k1 = tf.keras.layers.Dropout(0.05)(k1)
-            k1 = tf.keras.layers.MaxPooling2D((2,2))(k1)
+            #k1 = tf.keras.layers.MaxPooling2D((2,2))(k1)
 
 
             k2 = tf.keras.layers.Conv2D(32, (3,3), padding ="same")(k1)
@@ -814,8 +948,8 @@ class Architectures():
             k2 = tf.keras.layers.MaxPooling2D((2,2))(k2)
 
 
-            c4 = tf.keras.layers.Flatten()(k2)
-            #c4 = tf.keras.layers.GlobalAveragePooling2D()(k2)
+            #c4 = tf.keras.layers.Flatten()(k2)
+            c4 = tf.keras.layers.GlobalAveragePooling2D()(k2)
             
             c4 = tf.keras.layers.Dense(256,activation="relu")(c4)
             c4 = tf.keras.layers.Dropout(0.2)(c4)
