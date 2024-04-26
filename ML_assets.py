@@ -769,9 +769,81 @@ class Architectures():
             return model
         
 
+        @staticmethod
+        def StupidNet(shape , n_classes):
+            img_H , img_W , channels = shape
+
+            #!!!
+            #Create neural network structure
+            ##############
+            
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+
+            c1 = tf.keras.layers.Conv2D(64, (3,3), padding="same")(inputs)
+            c1 = tf.keras.layers.BatchNormalization()(c1)
+            c1 = tf.keras.layers.LeakyReLU()(c1)
+            c1 = tf.keras.layers.Dropout(0.05)(c1)
+            c1 = tf.keras.layers.MaxPooling2D((2,2))(c1)
+
+
+            c2 = tf.keras.layers.Conv2D(128, (3,3), padding="same")(c1)
+            c2 = tf.keras.layers.BatchNormalization()(c2)
+            c2 = tf.keras.layers.LeakyReLU()(c2)
+            c2 = tf.keras.layers.Dropout(0.05)(c2)
+            c2 = tf.keras.layers.MaxPooling2D((3,3))(c2)
+
+
+            c3 = tf.keras.layers.Conv2D(256, (3,3), padding ="same")(c2)
+            c3 = tf.keras.layers.BatchNormalization()(c3)
+            c3 = tf.keras.layers.LeakyReLU()(c3)
+            c3 = tf.keras.layers.Dropout(0.05)(c3)
+            c3 = tf.keras.layers.MaxPooling2D((2,2))(c3)
+
+
+            k1 = tf.keras.layers.Conv2D(128, (3,3), padding ="same")(c3)
+            k1 = tf.keras.layers.BatchNormalization()(k1)
+            k1 = tf.keras.layers.LeakyReLU()(k1)
+            k1 = tf.keras.layers.Dropout(0.05)(k1)
+            k1 = tf.keras.layers.MaxPooling2D((2,2))(k1)
+
+
+            k2 = tf.keras.layers.Conv2D(32, (3,3), padding ="same")(k1)
+            k2 = tf.keras.layers.BatchNormalization()(k2)
+            k2 = tf.keras.layers.LeakyReLU()(k2)
+            k2 = tf.keras.layers.Dropout(0.05)(k2)
+            k2 = tf.keras.layers.MaxPooling2D((2,2))(k2)
+
+
+            c4 = tf.keras.layers.Flatten()(k2)
+            #c4 = tf.keras.layers.GlobalAveragePooling2D()(k2)
+            
+            c4 = tf.keras.layers.Dense(256,activation="relu")(c4)
+            c4 = tf.keras.layers.Dropout(0.2)(c4)
+
+
+            c5 = tf.keras.layers.Dense(128,activation="relu")(c4)
+            c5 = tf.keras.layers.Dropout(0.5)(c5)
+
+
+            c6 = tf.keras.layers.Dense(128,activation="relu")(c5)
+            c6 = tf.keras.layers.Dropout(0.5)(c6)
+
+
+            c7 = tf.keras.layers.Dense(64,activation="relu")(c6)
+            c7 = tf.keras.layers.Dropout(0.4)(c7)
 
 
 
+
+
+            ##############
+                 
+            #Okreslenie wartosci wyjsciowych
+
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(c6)
+
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model
 
 
 
