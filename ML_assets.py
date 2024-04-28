@@ -516,12 +516,20 @@ class General:
         plt.show()
 
 
+
+    def OneHot_decode(labels):
+        w = list(set(labels))
+        w = len(w)
+        y = np.eye(w)[labels]
+        
+        return y
         
 
         
 class Architectures():
     
     class AnimalNet():
+        
         @staticmethod
         def AnimalNet_v64(shape , n_classes):
             img_H , img_W , channels = shape
@@ -575,7 +583,7 @@ class Architectures():
                     
                     x_merged = tf.keras.layers.SpatialDropout2D(0.2)(x_merged)
                 
-                return x
+                return x_merged
             
 
 
@@ -902,6 +910,102 @@ class Architectures():
             return model
 
 
+        @staticmethod
+        def FungiNet_224(shape , n_classes):
+            img_H , img_W , channels = shape
+            #Functions of network:
+                
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)   
+            
+            def relu6(x):
+                return min(max(0, x), 6)
+            
+            
+            def inv_residual_block(x , filters , t = 6 , s = 1 ):
+
+                squeeze = filters//t
+                
+
+                # Expansion phase: 1x1 convolution to increase channel dimensionality
+                m = tf.keras.layers.Conv2D(filters, (1, 1))(x)
+                m = tf.keras.layers.BatchNormalization()(m)
+                m = tf.keras.layers.Activation('relu6')(m)
+                
+                # Depthwise convolution phase
+                m = tf.keras.layers.DepthwiseConv2D((3, 3), strides=(s, s), padding='same')(m)
+                m = tf.keras.layers.BatchNormalization()(m)
+                m = tf.keras.layers.Activation('relu6')(m)
+                
+                # Squeeze phase: 1x1 convolution to decrease channel dimensionality
+                m = tf.keras.layers.Conv2D(squeeze, (1, 1))(m)
+                m = tf.keras.layers.BatchNormalization()(m)
+                
+                b = tf.keras.layers.Conv2D(squeeze, (1, 1))(x)
+                if s == 1:
+                    final = tf.keras.layers.Add()([m,b])
+                    return final
+                else:
+                    return m
+            
+            def bottleneck(x , t , c , n , s):
+                for i in range(n):
+                    if s >1:
+                        x = inv_residual_block(x , c , t , s)
+                        s = 1
+                    else:
+                        x = inv_residual_block(x , c , t , s)
+                        
+                return x
+                        
+
+
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            c0 = tf.keras.layers.Conv2D(32, (3,3),strides=(2,2), padding="same")(inputs)
+            
+            b1 = bottleneck(c0 , t=1 , c=16 , n=1 , s=1)
+            b2 = bottleneck(b1 , t=6 , c=24 , n=2 , s=2)
+            b3 = bottleneck(b2 , t=6 , c=32 , n=3 , s=2)
+            b4 = bottleneck(b3 , t=6 , c=64 , n=4 , s=2)
+            b5 = bottleneck(b4 , t=6 , c=96 , n=3 , s=1)
+            b6 = bottleneck(b5 , t=6 , c=160 , n=3 , s=2)
+            b7 = bottleneck(b6 , t=6 , c=320 , n=1 , s=1)
+            
+            c8 = tf.keras.layers.Conv2D(1280, (1,1), padding="same")(b7)
+            
+            a9 = tf.keras.layers.GlobalAveragePooling2D()(c8)
+            
+            
+            
+            d0 = tf.keras.layers.Dense(256)(a9)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            
+            d0 = tf.keras.layers.Dense(128)(d0)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            
+            d0 = tf.keras.layers.Dense(64)(d0)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            
+
+            
+            
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(d0)
+
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model
+            
+                
+
+
+
+    
 
         @staticmethod
         def StupidNet(shape , n_classes):
@@ -978,7 +1082,6 @@ class Architectures():
 
             model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
             return model
-
 
 
 
