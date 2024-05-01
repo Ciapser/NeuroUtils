@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn as skl
 import itertools
+import math
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -30,8 +31,6 @@ class DataSets:
         return X
     
 
-    
-    
     
     
     def Create_Img_Classification_DataSet(Data_directory , img_H , img_W ,Save_directory, grayscale = False , r_value = 1.4 , reduced = False):
@@ -155,6 +154,7 @@ class DataSets:
         
         print("----------------------\nTime took compiling images:",round(timer()-timer_start,2),"\n----------------------")
         
+       
         
             
     def Load_And_Merge_DataSet(Data_directory , samples_per_class = None):
@@ -316,6 +316,7 @@ class ImageProcessing:
         feature_img = np.dstack((image, edges)).astype(image.dtype)
         return feature_img
      
+        
     def denoise_img(img):
         img_type = img.dtype
         big_range = True
@@ -413,9 +414,7 @@ class General:
                     
                 
         return model , train , starting_epoch
-
-
-        
+    
     
     def Model_training_history_plot_CSV(Model_training_history):
         try:
@@ -516,7 +515,6 @@ class General:
         plt.show()
 
 
-
     def OneHot_decode(labels):
         w = list(set(labels))
         w = len(w)
@@ -528,7 +526,7 @@ class General:
         
 class Architectures():
     
-    class AnimalNet():
+    class Img_Classification():
         
         @staticmethod
         def AnimalNet_v64(shape , n_classes):
@@ -911,7 +909,7 @@ class Architectures():
 
 
         @staticmethod
-        def FungiNet_224(shape , n_classes):
+        def MobileNet_v2(shape , n_classes, alpha = 1):
             img_H , img_W , channels = shape
             #Functions of network:
                 
@@ -930,12 +928,12 @@ class Architectures():
                 # Expansion phase: 1x1 convolution to increase channel dimensionality
                 m = tf.keras.layers.Conv2D(filters, (1, 1))(x)
                 m = tf.keras.layers.BatchNormalization()(m)
-                m = tf.keras.layers.Activation('relu6')(m)
+                m = Swish(m)
                 
                 # Depthwise convolution phase
                 m = tf.keras.layers.DepthwiseConv2D((3, 3), strides=(s, s), padding='same')(m)
                 m = tf.keras.layers.BatchNormalization()(m)
-                m = tf.keras.layers.Activation('relu6')(m)
+                m = Swish(m)
                 
                 # Squeeze phase: 1x1 convolution to decrease channel dimensionality
                 m = tf.keras.layers.Conv2D(squeeze, (1, 1))(m)
@@ -962,36 +960,49 @@ class Architectures():
 
             inputs = tf.keras.layers.Input((img_H, img_W, channels))
             
-            c0 = tf.keras.layers.Conv2D(32, (3,3),strides=(2,2), padding="same")(inputs)
+            c0 = tf.keras.layers.Conv2D(32*alpha, (3,3),strides=(2,2), padding="same")(inputs)
             
-            b1 = bottleneck(c0 , t=1 , c=16 , n=1 , s=1)
-            b2 = bottleneck(b1 , t=6 , c=24 , n=2 , s=2)
-            b3 = bottleneck(b2 , t=6 , c=32 , n=3 , s=2)
-            b4 = bottleneck(b3 , t=6 , c=64 , n=4 , s=2)
-            b5 = bottleneck(b4 , t=6 , c=96 , n=3 , s=1)
-            b6 = bottleneck(b5 , t=6 , c=160 , n=3 , s=2)
-            b7 = bottleneck(b6 , t=6 , c=320 , n=1 , s=1)
+            b1 = bottleneck(c0 , t=1 , c=int(16*alpha) , n=1 , s=1)
+            b1 = tf.keras.layers.SpatialDropout2D(0.1)(b1)
             
-            c8 = tf.keras.layers.Conv2D(1280, (1,1), padding="same")(b7)
+            b2 = bottleneck(b1 , t=6 , c=int(24*alpha) , n=2 , s=2)
+            b2 = tf.keras.layers.SpatialDropout2D(0.1)(b2)
+            
+            b3 = bottleneck(b2 , t=6 , c=int(32*alpha) , n=3 , s=2)
+            b3 = tf.keras.layers.SpatialDropout2D(0.1)(b3)
+            
+            b4 = bottleneck(b3 , t=6 , c=int(64*alpha) , n=4 , s=2)
+            b4 = tf.keras.layers.SpatialDropout2D(0.1)(b4)
+            
+            b5 = bottleneck(b4 , t=6 , c=int(96*alpha) , n=3 , s=1)
+            b5 = tf.keras.layers.SpatialDropout2D(0.1)(b5)
+            
+            b6 = bottleneck(b5 , t=6 , c=int(160*alpha) , n=3 , s=2)
+            b6 = tf.keras.layers.SpatialDropout2D(0.1)(b6)
+            
+            b7 = bottleneck(b6 , t=6 , c=int(320*alpha) , n=1 , s=1)
+            b7 = tf.keras.layers.SpatialDropout2D(0.1)(b7)
+            
+            c8 = tf.keras.layers.Conv2D(int(1280*alpha), (1,1), padding="same")(b7)
+            c8 = Swish(c8)
             
             a9 = tf.keras.layers.GlobalAveragePooling2D()(c8)
             
             
-            
-            d0 = tf.keras.layers.Dense(256)(a9)
+            d0 = tf.keras.layers.Dense(int(256*alpha))(a9)
             d0 = Swish(d0)
             d0 = tf.keras.layers.BatchNormalization()(d0)
-            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            d0 = tf.keras.layers.Dropout(0.1)(d0)
             
-            d0 = tf.keras.layers.Dense(128)(d0)
+            d0 = tf.keras.layers.Dense(int(128*alpha))(d0)
             d0 = Swish(d0)
             d0 = tf.keras.layers.BatchNormalization()(d0)
-            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            d0 = tf.keras.layers.Dropout(0.15)(d0)
             
-            d0 = tf.keras.layers.Dense(64)(d0)
+            d0 = tf.keras.layers.Dense(int(64*alpha))(d0)
             d0 = Swish(d0)
             d0 = tf.keras.layers.BatchNormalization()(d0)
-            d0 = tf.keras.layers.Dropout(0.2)(d0)
+            d0 = tf.keras.layers.Dropout(0.1)(d0)
             
 
             
@@ -1000,20 +1011,118 @@ class Architectures():
 
             model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
             return model
+
+
+        @staticmethod
+        def MobileNet_v2_corrected(shape , n_classes, alpha = 1):
+            img_H , img_W , channels = shape
+            #Functions of network:
+                
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)   
             
+            def relu6(x):
+                return min(max(0, x), 6)
+            
+            
+            def inv_residual_block(x , filters , t = 6 , s = 1 ):
+
+                squeeze = filters
+                expand = filters*t
                 
 
+                # Expansion phase: 1x1 convolution to increase channel dimensionality
+                m = tf.keras.layers.Conv2D(expand, (1, 1))(x)
+                m = tf.keras.layers.BatchNormalization()(m)
+                m = Swish(m)
+                
+                # Depthwise convolution phase
+                m = tf.keras.layers.DepthwiseConv2D((3, 3), strides=(s, s), padding='same')(m)
+                m = tf.keras.layers.BatchNormalization()(m)
+                m = Swish(m)
+                
+                # Squeeze phase: 1x1 convolution to decrease channel dimensionality
+                m = tf.keras.layers.Conv2D(squeeze, (1, 1))(m)
+                m = tf.keras.layers.BatchNormalization()(m)
+                
+                b = tf.keras.layers.Conv2D(squeeze, (1, 1))(x)
+                if s == 1:
+                    final = tf.keras.layers.Add()([m,b])
+                    return final
+                else:
+                    return m
+            
+            def bottleneck(x , t , c , n , s):
+                for i in range(n):
+                    if s >1:
+                        x = inv_residual_block(x , c , t , s)
+                        s = 1
+                    else:
+                        x = inv_residual_block(x , c , t , s)
+                        
+                return x
+                        
 
 
-    
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            c0 = tf.keras.layers.Conv2D(32*alpha, (3,3),strides=(2,2), padding="same")(inputs)
+            
+            b1 = bottleneck(c0 , t=1 , c=int(16*alpha) , n=1 , s=1)
+            b1 = tf.keras.layers.SpatialDropout2D(0.1)(b1)
+            
+            b2 = bottleneck(b1 , t=6 , c=int(24*alpha) , n=2 , s=2)
+            b2 = tf.keras.layers.SpatialDropout2D(0.1)(b2)
+            
+            b3 = bottleneck(b2 , t=6 , c=int(32*alpha) , n=3 , s=2)
+            b3 = tf.keras.layers.SpatialDropout2D(0.1)(b3)
+            
+            b4 = bottleneck(b3 , t=6 , c=int(64*alpha) , n=4 , s=2)
+            b4 = tf.keras.layers.SpatialDropout2D(0.1)(b4)
+            
+            b5 = bottleneck(b4 , t=6 , c=int(96*alpha) , n=3 , s=1)
+            b5 = tf.keras.layers.SpatialDropout2D(0.1)(b5)
+            
+            b6 = bottleneck(b5 , t=6 , c=int(160*alpha) , n=3 , s=2)
+            b6 = tf.keras.layers.SpatialDropout2D(0.1)(b6)
+            
+            b7 = bottleneck(b6 , t=6 , c=int(320*alpha) , n=1 , s=1)
+            b7 = tf.keras.layers.SpatialDropout2D(0.1)(b7)
+            
+            c8 = tf.keras.layers.Conv2D(int(1280*alpha), (1,1), padding="same")(b7)
+            c8 = Swish(c8)
+            
+            a9 = tf.keras.layers.GlobalAveragePooling2D()(c8)
+            
+            
+            d0 = tf.keras.layers.Dense(int(256*alpha))(a9)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.1)(d0)
+            
+            d0 = tf.keras.layers.Dense(int(128*alpha))(d0)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.15)(d0)
+            
+            d0 = tf.keras.layers.Dense(int(64*alpha))(d0)
+            d0 = Swish(d0)
+            d0 = tf.keras.layers.BatchNormalization()(d0)
+            d0 = tf.keras.layers.Dropout(0.1)(d0)
+            
+
+            
+            
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(d0)
+
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model    
 
         @staticmethod
         def StupidNet(shape , n_classes):
             img_H , img_W , channels = shape
 
-            #!!!
-            #Create neural network structure
-            ##############
+
             
             inputs = tf.keras.layers.Input((img_H, img_W, channels))
 
@@ -1085,7 +1194,283 @@ class Architectures():
 
 
 
+        @staticmethod
+        def ResNet_own(shape , n_classes):
+            img_H , img_W , channels = shape
+            
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)  
 
+            
+            def res_small_block(x , f , s , drop):
+                if s>1:
+                    r = tf.keras.layers.Conv2D(f , (3,3) , strides = (s,s) , padding = "same")(x)
+                    r = tf.keras.layers.BatchNormalization()(r)
+                    r = Swish(r)
+                    
+                    r = tf.keras.layers.Conv2D(f , (3,3) , strides = (1,1) , padding = "same")(r)
+                    r = tf.keras.layers.BatchNormalization()(r)
+                    r = Swish(r)
+                    
+                else:
+                    r = tf.keras.layers.Conv2D(f , (3,3) , strides = (1,1) , padding = "same")(x)
+                    r = tf.keras.layers.BatchNormalization()(r)
+                    r = Swish(r)
+                    
+                    r = tf.keras.layers.Conv2D(f , (3,3) , strides = (1,1) , padding = "same")(r)
+                    r = tf.keras.layers.BatchNormalization()(r)
+                    r = Swish(r)
+                    
+                
+
+                
+                if s == 1:
+                    r = tf.keras.layers.Add()([x,r])
+                    r = tf.keras.layers.SpatialDropout2D(drop)(r)
+                    return r
+                else:
+                    r = tf.keras.layers.SpatialDropout2D(drop)(r)
+                    return r
+                
+                
+                
+                
+            def res_main_block(x , filters , depth, strides = 1 , drop = 0.1):
+                m = x
+                for i in range(depth):
+                    x = res_small_block(x , filters , strides , drop)
+                    
+                    if strides >1:
+                        strides = 1
+                m = tf.keras.layers.Conv2D(filters , (3,3) , strides = (2,2) , padding = "same")(m)
+                m = tf.keras.layers.concatenate([x,m])
+                m = tf.keras.layers.Conv2D(filters , (1,1) , padding = "valid")(m)
+                m = tf.keras.layers.BatchNormalization()(m)
+                m = Swish(m)
+                m = tf.keras.layers.SpatialDropout2D(drop*2)(m)
+                
+                return m
+                    
+
+            #For later use of auto-scaling network by img_size
+            #count = int(math.floor(math.log(img_H / small_format, 2)))
+            
+            
+            
+            
+            
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            
+            x = tf.keras.layers.Conv2D(64, (7,7) ,padding = "same")(inputs)
+            
+            x = res_main_block(x , 64 , 3 , strides = 2)
+            x = res_main_block(x , 128 , 4 , strides = 2)
+            x = res_main_block(x , 256 , 6 , strides = 2)
+            x = res_main_block(x , 512 , 3 , strides = 2)
+            
+            x = tf.keras.layers.GlobalAveragePooling2D()(x)
+            
+            x = tf.keras.layers.Dense(1024)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Swish(x)
+            
+
+
+                
+                
+                
+
+
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(x)
+
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model
+            
+
+        @staticmethod
+        def ResNet_50(shape , n_classes):
+            img_H , img_W , channels = shape
+            
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)  
+            
+            def conv_batch_relu(x , filters , kernel_size , strides = 1):
+                x = tf.keras.layers.Conv2D(filters , kernel_size , strides , padding = "same")(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = Swish(x)
+                
+                return x
+
+                    
+            def identity_block(tensor , filters):
+                x = conv_batch_relu(tensor , filters = filters , kernel_size = 1 , strides = 1)
+                x = conv_batch_relu(x , filters = filters , kernel_size = 3 , strides = 1)
+                
+                x = tf.keras.layers.Conv2D(filters*4 , kernel_size = 1 , strides = 1)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.Add()([tensor,x])
+                x = Swish(x)
+                
+                return x
+                
+            def projection_block(tensor , filters , strides):
+                x = conv_batch_relu(tensor , filters = filters , kernel_size = 1 , strides = strides)
+                x = conv_batch_relu(x , filters = filters , kernel_size = 3 , strides = 1)
+                x = tf.keras.layers.Conv2D(filters*4 , kernel_size = 1 , strides = 1)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                
+                shortcut = tf.keras.layers.Conv2D(filters*4 , 1 , strides = strides)(tensor)
+                shortcut = tf.keras.layers.BatchNormalization()(shortcut)
+                
+                
+                x = tf.keras.layers.Add()([shortcut,x])
+                x = Swish(x)
+                return x
+            
+
+                
+
+            def res_main_block(x , filters ,reps , strides):
+                x = projection_block(x , filters , strides)
+                
+                for _ in range(reps-1):
+                    x = identity_block(x , filters)
+                return x
+
+
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            
+            x = tf.keras.layers.Conv2D(64, (7,7) , strides = (2,2) ,padding = "same")(inputs)
+            
+            x = tf.keras.layers.MaxPool2D((2,2))(x)
+            #x = tf.keras.layers.Conv2D(64*4, (1,1) , padding = "same")(x)
+            
+            x = res_main_block(x , 64 , 3 , strides = 1)
+            x = res_main_block(x , 128 , 4 , strides = 2)
+            x = res_main_block(x , 256 , 6 , strides = 2)
+            x = res_main_block(x , 512 , 3 , strides = 2)
+            
+            x = tf.keras.layers.GlobalAveragePooling2D()(x)
+
+            x = tf.keras.layers.Dense(256)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Swish(x)
+            
+            x = tf.keras.layers.Dense(128)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Swish(x)
+            
+            x = tf.keras.layers.Dense(64)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            
+            x = tf.keras.layers.Dense(64)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+   
+        
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(x)
+            
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model 
+
+
+
+
+        @staticmethod
+        def ResNet_50_Dropout(shape , n_classes):
+            img_H , img_W , channels = shape
+            
+            def Swish(x):
+                return x * tf.nn.sigmoid(x)  
+
+            
+            def conv_batch_relu(x , filters , kernel_size , strides = 1):
+                x = tf.keras.layers.Conv2D(filters , kernel_size , strides , padding = "same")(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = Swish(x)
+                x = tf.keras.layers.SpatialDropout2D(0.05)(x)
+                
+                return x
+       
+                    
+            def identity_block(tensor , filters):
+                x = conv_batch_relu(tensor , filters = filters , kernel_size = 1 , strides = 1)
+                x = conv_batch_relu(x , filters = filters , kernel_size = 3 , strides = 1)
+                
+                x = tf.keras.layers.Conv2D(filters*4 , kernel_size = 1 , strides = 1)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.Add()([tensor,x])
+                x = Swish(x)
+                x = tf.keras.layers.SpatialDropout2D(0.05*2)(x)
+                
+                return x
+                
+            def projection_block(tensor , filters , strides):
+                x = conv_batch_relu(tensor , filters = filters , kernel_size = 1 , strides = strides)
+                x = conv_batch_relu(x , filters = filters , kernel_size = 3 , strides = 1)
+                x = tf.keras.layers.Conv2D(filters*4 , kernel_size = 1 , strides = 1)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                
+                shortcut = tf.keras.layers.Conv2D(filters*4 , 1 , strides = strides)(tensor)
+                shortcut = tf.keras.layers.BatchNormalization()(shortcut)
+                
+                
+                x = tf.keras.layers.Add()([shortcut,x])
+                x = Swish(x)
+                x = tf.keras.layers.SpatialDropout2D(0.05*2)(x)
+                return x
+            
+       
+                
+       
+            def res_main_block(x , filters ,reps , strides):
+                x = projection_block(x , filters , strides)
+                
+                for _ in range(reps-1):
+                    x = identity_block(x , filters)
+                x = tf.keras.layers.SpatialDropout2D(0.05*4)(x)
+                return x
+       
+       
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            
+            x = tf.keras.layers.Conv2D(64, (7,7) , strides = (2,2) ,padding = "same")(inputs)
+            
+            x = tf.keras.layers.MaxPool2D((2,2))(x)
+            #x = tf.keras.layers.Conv2D(64*4, (1,1) , padding = "same")(x)
+            
+            x = res_main_block(x , 64 , 3 , strides = 1)
+            x = res_main_block(x , 128 , 4 , strides = 2)
+            x = res_main_block(x , 256 , 6 , strides = 2)
+            x = res_main_block(x , 512 , 3 , strides = 2)
+            
+            x = tf.keras.layers.GlobalAveragePooling2D()(x)
+       
+            x = tf.keras.layers.Dense(256)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Swish(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
+            
+            x = tf.keras.layers.Dense(128)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Swish(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
+            
+            x = tf.keras.layers.Dense(64)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Dropout(0.05*4)(x)
+            
+            x = tf.keras.layers.Dense(64)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Dropout(0.05*4)(x)
+       
+        
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(x)
+            
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            return model
 
 
 
