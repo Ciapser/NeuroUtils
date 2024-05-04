@@ -3,7 +3,7 @@ import ML_assets as ml
 from ML_assets import General
 
 #Downloading config
-import config
+#import config
 
 #Importing rest of the libraries
 import os
@@ -21,96 +21,8 @@ import sklearn as skl
 
 
 
-def main():
-    #Checking Tensorflow Version and available computing devices
-    print('Tensorflow version: ' , tf.__version__,"\n\n-------------------------------\n")
-    print('Detected Devices: \n' , tf.config.list_physical_devices(),"\n-------------------------------\n")
-    
-    
-    #!!!#Setting up parameters
-    #########################################################################
-    #########################################################################
-    
-    #Initial parameters
-    DataBase_directory = config.Initial_params["DataBase_directory"]
-    Kaggle_competition_dataset = config.Initial_params["Kaggle_competition_dataset"]
-    Stratification_test = config.Initial_params["Stratification_test"]
-    grayscale = config.Initial_params["grayscale"]
-    img_H = config.Initial_params["img_H"]
-    img_W = config.Initial_params["img_W"]
-    DataType = config.Initial_params["DataType"]
-    
-    
-    #Augument parameters
-    reduced_set_size = config.Augment_params["reduced_set_size"]
-    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
-    
-    
-    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
-                  ("randBright" ,   config.Augment_params["randBright"]) ,
-                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
-                  ("denoise" ,      config.Augment_params["denoise"]) ,
-                  ("contour" ,      config.Augment_params["contour"])]
-    
-    
-    #Model parameters
-    model_architecture = config.Model_parameters["model_architecture"]
-    device = config.Model_parameters["device"]
-    train = config.Model_parameters["train"]  #Train model or only load results to plots, evaluations etc.
-    epochs = config.Model_parameters["epochs"]
-    patience = config.Model_parameters["patience"]
-    batch_size = config.Model_parameters["batch_size"]
-    evaluate = config.Model_parameters["batch_size"]
-    show_architecture = config.Model_parameters["show_architecture"]
-    
-    #Other parameters
-    if Kaggle_competition_dataset:
-        Competition_dictionary = config.Other_parameters["Competition_dictionary"]
-    #########################################################################
-    #########################################################################
-    
-    
-    
-    
-    
-    #!!! Parameters to variables calculation
-    #########################################################################
-    #########################################################################
-    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
-    for item in parameters:
-        if item[1]:
-            str_parameters += str("_"+item[0])
-        del item
-    
-    
-    #Dependent parameters
-    if grayscale:
-        channels = 1
-    else:
-        channels = 3
-    
-    #If contour is True
-    if parameters[4][1]:
-        channels+=1
-        
-    #########################################################################
-    #########################################################################    
-        
-        
-    
-    #!!!Data loading
-    #########################################################################
-    #########################################################################
-    if grayscale:
-        form = "Grayscale"
-    else:
-        form = "RGB"
-    
-    
-    Data_toRun_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet_toRun" , str(str(img_H)+"x"+str(img_W)+"_"+form+str_parameters))
-    #Create Data_path
-    Data_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet" , str(str(img_H)+"x"+str(img_W)+"_"+form))
-    
+def Initialize_data():
+
     
     if not os.path.isdir(Data_toRun_directory):
         os.makedirs(Data_toRun_directory)
@@ -316,22 +228,26 @@ def main():
         y_test = y_test.astype(DataType)
     #########################################################################
     #########################################################################
+    if Kaggle_competition_dataset:
+        return x_train , y_train, x_val, y_val, dictionary
+    else:
+        return x_train , y_train, x_val, y_val, x_test, y_test, dictionary
     
-    
-    
+def Initialize_model(n_classes):    
+  
     #!!! Defining the architecture of the CNN 
     #and creation of directory based on it and initial parameters
     #########################################################################
     #########################################################################
     
     #Checking if given architecture name is present in library
-    model_architecture = f"{model_architecture}"
+    model_architecture = f"{model_architecture_config}"
     
     model_architecture_class = getattr(ml.Architectures.Img_Classification, model_architecture, None)
     
     if model_architecture_class is not None:
         # If the class is found, instantiate the model
-        model = model_architecture_class((img_H,img_W,channels) , len(dictionary))
+        model = model_architecture_class((img_H,img_W,channels) , n_classes)
         print("Found architecture named: ",model_architecture,)
     else:
         # If the class is not found, print a message
@@ -340,11 +256,8 @@ def main():
     
     
     #Creating directory to save weights of trained model and other data about it
-    model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
-    
-    model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
-    
-    model_weights_directory = os.path.join(model_directory , model_name)
+
+
     #Check if directory of trained model is present, if not, create one 
     if not os.path.isdir(model_directory):
         os.makedirs(model_directory)
@@ -369,14 +282,14 @@ def main():
     
     #########################################################################
     #########################################################################
+    return model
     
-    
-    
+def Initialize_training(model , x_train , y_train , x_val , y_val):    
     #!!! Model training
     #########################################################################
     #########################################################################
-    model_history_directory = os.path.join(model_directory , "Model_history.csv")
-    model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, model_weights_directory, model_history_directory)
+    
+    model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train_config, model_weights_directory, model_history_directory)
     
             
     if train:
@@ -427,8 +340,11 @@ def main():
      
     #########################################################################
     #########################################################################
-        
+    return model
+
+
     
+def Initialize_Results(model , dictionary, x_train = None ,y_train = None ,x_val = None , y_val = None , x_test = None , y_test = None):    
     #!!! Model results
     #########################################################################
     #########################################################################
@@ -438,7 +354,7 @@ def main():
     General.Model_training_history_plot_CSV(Model_history)
     
     
-    if not Kaggle_competition_dataset:
+    try:
         #Create confusion matrix
         #Predict classes
         print("Predicting classes based on test set...")
@@ -446,7 +362,10 @@ def main():
         
         plt.figure()
         ml.General.Conf_matrix_classification(y_test  ,y_pred , dictionary , normalize = True)
-    else:
+    except:
+        print("No test set provided, skipping...")
+        
+    try:
         #Create confusion matrix
         #Predict classes
         print("Predicting classes based on validation set...")
@@ -454,33 +373,126 @@ def main():
         
         plt.figure()
         ml.General.Conf_matrix_classification(y_val ,y_pred , dictionary , normalize = True)
-    
+    except:
+        print("No validation set provided, skipping...")    
     
 
     if evaluate:
-        #Evaluate model
-        print("\nModel evaluation train set:")
-        model.evaluate(x_train, y_train)
+        try:
+            #Evaluate model
+            print("\nModel evaluation train set:")
+            model.evaluate(x_train, y_train)
+        except:
+            print("No train set provided, skipping...")
+            
+        try:
+            #Evaluate model
+            print("\nModel evaluation validation set:")
+            model.evaluate(x_val, y_val)
+        except:
+            print("No validation set provided, skipping...")
         
-        #Evaluate model
-        print("\nModel evaluation validation set:")
-        model.evaluate(x_val, y_val)
-        
-        if not Kaggle_competition_dataset:
+        try:
             #Evaluate model
             print("\nModel evaluation test set:")
             model.evaluate(x_test, y_test)
+        except:
+            print("No test set provided, skipping...")
     
     
     #########################################################################
     #########################################################################
     
     
+def Initialize(constants):
+    # Set constants from the provided dictionary
+    global config
+    config = constants    
+    
+
+    
+    #global dictionary
+    global DataBase_directory, Kaggle_competition_dataset, Stratification_test ,grayscale, img_H,img_W ,DataType 
+    global reduced_set_size , train_dataset_multiplier, parameters,model_architecture_config , device, train_config , epochs , patience
+    global batch_size , evaluate , show_architecture , Competition_dictionary, Data_toRun_directory,Data_directory
+    global str_parameters,channels , form , model_name , model_directory , model_weights_directory , model_history_directory
+   
+    #!!!#Setting up parameters
+    #########################################################################
+    #########################################################################
+    
+    #Initial parameters
+    DataBase_directory = config.Initial_params["DataBase_directory"]
+    Kaggle_competition_dataset = config.Initial_params["Kaggle_competition_dataset"]
+    Stratification_test = config.Initial_params["Stratification_test"]
+    grayscale = config.Initial_params["grayscale"]
+    img_H = config.Initial_params["img_H"]
+    img_W = config.Initial_params["img_W"]
+    DataType = config.Initial_params["DataType"]
     
     
-if __name__ == "__main__":
-   main()   
+    #Augument parameters
+    reduced_set_size = config.Augment_params["reduced_set_size"]
+    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
     
     
+    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
+                  ("randBright" ,   config.Augment_params["randBright"]) ,
+                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
+                  ("denoise" ,      config.Augment_params["denoise"]) ,
+                  ("contour" ,      config.Augment_params["contour"])]
     
+    
+    #Model parameters
+    model_architecture_config = config.Model_parameters["model_architecture"]
+    device = config.Model_parameters["device"]
+    train_config = config.Model_parameters["train"]  #Train model or only load results to plots, evaluations etc.
+    epochs = config.Model_parameters["epochs"]
+    patience = config.Model_parameters["patience"]
+    batch_size = config.Model_parameters["batch_size"]
+    evaluate = config.Model_parameters["batch_size"]
+    show_architecture = config.Model_parameters["show_architecture"]
+    
+    #Other parameters
+    if Kaggle_competition_dataset:
+        Competition_dictionary = config.Other_parameters["Competition_dictionary"]
+    
+    
+    # Parameters to variables calculation
+    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
+    for item in parameters:
+        if item[1]:
+            str_parameters += str("_"+item[0])
+        del item
+    
+    #Dependent parameters
+    if grayscale:
+        channels = 1
+    else:
+        channels = 3
+    
+    #If contour is True
+    if parameters[4][1]:
+        channels+=1
+    
+    #Form
+    if grayscale:
+        form = "Grayscale"
+    else:
+        form = "RGB"
+    
+    
+    Data_toRun_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet_toRun" , str(str(img_H)+"x"+str(img_W)+"_"+form+str_parameters))
+    #Create Data_path
+    Data_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet" , str(str(img_H)+"x"+str(img_W)+"_"+form))
+    
+    model_name = str(model_architecture_config + "_bs"+str(batch_size)+".keras")
+    model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture_config) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
+    model_weights_directory = os.path.join(model_directory , model_name)
+    model_history_directory = os.path.join(model_directory , "Model_history.csv")
+    #########################################################################
+    #########################################################################
+
+
+ 
     
