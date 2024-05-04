@@ -2,10 +2,10 @@
 import ML_assets as ml
 from ML_assets import General
 
-#Downloading config
-import config
+
 
 #Importing rest of the libraries
+import sys
 import os
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -17,20 +17,30 @@ import pandas as pd
 from tqdm import tqdm
 import sklearn as skl
 
+#Checking Tensorflow Version and available computing devices
+print('Tensorflow version: ' , tf.__version__,"\n\n-------------------------------\n")
+print('Detected Devices: \n' , tf.config.list_physical_devices(),"\n-------------------------------\n")
+
+
+#!!!#Setting up parameters
+#########################################################################
+#########################################################################
+
+
+def load_config(config_path):
+    sys.path.insert(0, config_path)
+    global config
+    import config
 
 
 
 
-def main():
-    #Checking Tensorflow Version and available computing devices
-    print('Tensorflow version: ' , tf.__version__,"\n\n-------------------------------\n")
-    print('Detected Devices: \n' , tf.config.list_physical_devices(),"\n-------------------------------\n")
     
-    
-    #!!!#Setting up parameters
-    #########################################################################
-    #########################################################################
-    
+
+
+
+
+def Initialize_data():
     #Initial parameters
     DataBase_directory = config.Initial_params["DataBase_directory"]
     Kaggle_competition_dataset = config.Initial_params["Kaggle_competition_dataset"]
@@ -54,14 +64,7 @@ def main():
     
     
     #Model parameters
-    model_architecture = config.Model_parameters["model_architecture"]
-    device = config.Model_parameters["device"]
-    train = config.Model_parameters["train"]  #Train model or only load results to plots, evaluations etc.
-    epochs = config.Model_parameters["epochs"]
-    patience = config.Model_parameters["patience"]
-    batch_size = config.Model_parameters["batch_size"]
-    evaluate = config.Model_parameters["batch_size"]
-    show_architecture = config.Model_parameters["show_architecture"]
+
     
     #Other parameters
     if Kaggle_competition_dataset:
@@ -95,9 +98,6 @@ def main():
         
     #########################################################################
     #########################################################################    
-        
-        
-    
     #!!!Data loading
     #########################################################################
     #########################################################################
@@ -110,7 +110,7 @@ def main():
     Data_toRun_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet_toRun" , str(str(img_H)+"x"+str(img_W)+"_"+form+str_parameters))
     #Create Data_path
     Data_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet" , str(str(img_H)+"x"+str(img_W)+"_"+form))
-    
+
     
     if not os.path.isdir(Data_toRun_directory):
         os.makedirs(Data_toRun_directory)
@@ -314,20 +314,96 @@ def main():
     if not Kaggle_competition_dataset:
         x_test = x_test.astype(DataType) / 255
         y_test = y_test.astype(DataType)
+    
+        
+    if  Kaggle_competition_dataset:    
+        return x_train , y_train , x_val , y_val , dictionary
+    else:
+        return x_train , y_train , x_val , y_val , x_test , y_test , dictionary
     #########################################################################
     #########################################################################
     
     
     
-    #!!! Defining the architecture of the CNN 
-    #and creation of directory based on it and initial parameters
+#!!! Defining the architecture of the CNN 
+#and creation of directory based on it and initial parameters
+#########################################################################
+#########################################################################
+
+def Initialize_model():
+    #Initial parameters
+    grayscale = config.Initial_params["grayscale"]
+    img_H = config.Initial_params["img_H"]
+    img_W = config.Initial_params["img_W"]
+
+    
+    
+    #Augument parameters
+    reduced_set_size = config.Augment_params["reduced_set_size"]
+    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
+    
+    
+    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
+                  ("randBright" ,   config.Augment_params["randBright"]) ,
+                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
+                  ("denoise" ,      config.Augment_params["denoise"]) ,
+                  ("contour" ,      config.Augment_params["contour"])]
+    
+    
+    #Model parameters
+    model_architecture_config = config.Model_parameters["model_architecture"]
+    batch_size = config.Model_parameters["batch_size"]
+    show_architecture = config.Model_parameters["show_architecture"]
+    
+
     #########################################################################
     #########################################################################
     
+    
+    
+    
+    
+    #!!! Parameters to variables calculation
+    #########################################################################
+    #########################################################################
+    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
+    for item in parameters:
+        if item[1]:
+            str_parameters += str("_"+item[0])
+        del item
+    
+    
+    #Dependent parameters
+    if grayscale:
+        channels = 1
+    else:
+        channels = 3
+    
+    #If contour is True
+    if parameters[4][1]:
+        channels+=1
+        
+    #########################################################################
+    #########################################################################    
+    #!!!Data loading
+    #########################################################################
+    #########################################################################
+    if grayscale:
+        form = "Grayscale"
+    else:
+        form = "RGB"
+    
+    
+    Data_toRun_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet_toRun" , str(str(img_H)+"x"+str(img_W)+"_"+form+str_parameters))
+    #Create Data_path
+
     #Checking if given architecture name is present in library
-    model_architecture = f"{model_architecture}"
+    model_architecture = f"{model_architecture_config}"
     
     model_architecture_class = getattr(ml.Architectures.Img_Classification, model_architecture, None)
+    
+    with open(os.path.join(Data_toRun_directory , "dictionary.json"), 'r') as json_file:
+        dictionary = json.load(json_file)
     
     if model_architecture_class is not None:
         # If the class is found, instantiate the model
@@ -339,12 +415,11 @@ def main():
         print("No such model architecture in library")
     
     
-    #Creating directory to save weights of trained model and other data about it
-    model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
+
     
     model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
     
-    model_weights_directory = os.path.join(model_directory , model_name)
+    
     #Check if directory of trained model is present, if not, create one 
     if not os.path.isdir(model_directory):
         os.makedirs(model_directory)
@@ -367,16 +442,90 @@ def main():
         tf.keras.utils.plot_model(model , os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , "Model_architecture.png"))
 
     
+    return model
     #########################################################################
     #########################################################################
     
     
     
-    #!!! Model training
+#!!! Model training
+#########################################################################
+#########################################################################
+def Initialize_training(model , x_train , y_train , x_val , y_val):
+    #Initial parameters
+
+    grayscale = config.Initial_params["grayscale"]
+    img_H = config.Initial_params["img_H"]
+    img_W = config.Initial_params["img_W"]
+
+    
+    
+    #Augument parameters
+    reduced_set_size = config.Augment_params["reduced_set_size"]
+    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
+    
+    
+    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
+                  ("randBright" ,   config.Augment_params["randBright"]) ,
+                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
+                  ("denoise" ,      config.Augment_params["denoise"]) ,
+                  ("contour" ,      config.Augment_params["contour"])]
+    
+    
+    #Model parameters
+    model_architecture_config = config.Model_parameters["model_architecture"]
+    device = config.Model_parameters["device"]
+    train_config = config.Model_parameters["train"]  #Train model or only load results to plots, evaluations etc.
+    epochs = config.Model_parameters["epochs"]
+    patience = config.Model_parameters["patience"]
+    batch_size = config.Model_parameters["batch_size"]
+
     #########################################################################
     #########################################################################
+    
+    
+    
+    
+    
+    #!!! Parameters to variables calculation
+    #########################################################################
+    #########################################################################
+    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
+    for item in parameters:
+        if item[1]:
+            str_parameters += str("_"+item[0])
+        del item
+    
+    
+    #Dependent parameters
+    if grayscale:
+        channels = 1
+    else:
+        channels = 3
+    
+    #If contour is True
+    if parameters[4][1]:
+        channels+=1
+        
+    #########################################################################
+    #########################################################################    
+    #!!!Data loading
+    #########################################################################
+    #########################################################################
+    if grayscale:
+        form = "Grayscale"
+    else:
+        form = "RGB"
+    
+    
+    model_architecture = f"{model_architecture_config}"
+    #Creating directory to save weights of trained model and other data about it
+    model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
+    model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
+    model_weights_directory = os.path.join(model_directory , model_name)
+    
     model_history_directory = os.path.join(model_directory , "Model_history.csv")
-    model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, model_weights_directory, model_history_directory)
+    model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train_config, model_weights_directory, model_history_directory)
     
             
     if train:
@@ -419,6 +568,7 @@ def main():
         #Save the best achieved model
         print("Loading model which was performing best during training...\n")
         model.load_weights(model_weights_directory)   
+        
             
     
          
@@ -427,18 +577,157 @@ def main():
      
     #########################################################################
     #########################################################################
-        
+def Initialize_weights_directory():
+    #Initial parameters
+    grayscale = config.Initial_params["grayscale"]
+    img_H = config.Initial_params["img_H"]
+    img_W = config.Initial_params["img_W"]
+
     
-    #!!! Model results
+    
+    #Augument parameters
+    reduced_set_size = config.Augment_params["reduced_set_size"]
+    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
+    
+    
+    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
+                  ("randBright" ,   config.Augment_params["randBright"]) ,
+                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
+                  ("denoise" ,      config.Augment_params["denoise"]) ,
+                  ("contour" ,      config.Augment_params["contour"])]
+    
+    
+    #Model parameters
+    model_architecture_config = config.Model_parameters["model_architecture"]
+    batch_size = config.Model_parameters["batch_size"]
+
     #########################################################################
     #########################################################################
+    
+    
+    
+    
+    
+    #!!! Parameters to variables calculation
+    #########################################################################
+    #########################################################################
+    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
+    for item in parameters:
+        if item[1]:
+            str_parameters += str("_"+item[0])
+        del item
+    
+    
+    #Dependent parameters
+    if grayscale:
+        channels = 1
+    else:
+        channels = 3
+    
+    #If contour is True
+    if parameters[4][1]:
+        channels+=1
+        
+    #########################################################################
+    #########################################################################    
+    #!!!Data loading
+    #########################################################################
+    #########################################################################
+    if grayscale:
+        form = "Grayscale"
+    else:
+        form = "RGB"
+    
+    
+
+
+    model_architecture = f"{model_architecture_config}"
+    #Creating directory to save weights of trained model and other data about it
+    model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
+    model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
+    model_weights_directory = os.path.join(model_directory , model_name)
+    
+    return model_weights_directory
+    
+
+
+
+        
+def Initialize_model_results(model , x_train , y_train , x_val , y_val , x_test = None , y_test = None):
+    #Initial parameters
+    grayscale = config.Initial_params["grayscale"]
+    img_H = config.Initial_params["img_H"]
+    img_W = config.Initial_params["img_W"]
+    #Augument parameters
+    reduced_set_size = config.Augment_params["reduced_set_size"]
+    train_dataset_multiplier = config.Augment_params["train_dataset_multiplier"]
+    
+    
+    parameters = [("flipRotate" ,   config.Augment_params["flipRotate"]) ,
+                  ("randBright" ,   config.Augment_params["randBright"]) ,
+                  ("gaussian" ,     config.Augment_params["gaussian_noise"]) ,
+                  ("denoise" ,      config.Augment_params["denoise"]) ,
+                  ("contour" ,      config.Augment_params["contour"])]
+    
+    
+    #Model parameters
+    model_architecture_config = config.Model_parameters["model_architecture"]
+    batch_size = config.Model_parameters["batch_size"]
+    evaluate = config.Model_parameters["batch_size"]
+    #########################################################################
+    #########################################################################
+    
+    
+    
+    
+    
+    #!!! Parameters to variables calculation
+    #########################################################################
+    #########################################################################
+    str_parameters = str("_reducet_set_size"+str(reduced_set_size)  + "_multiplier"+ str(train_dataset_multiplier))
+    for item in parameters:
+        if item[1]:
+            str_parameters += str("_"+item[0])
+        del item
+    
+    
+    #Dependent parameters
+    if grayscale:
+        channels = 1
+    else:
+        channels = 3
+    
+    #If contour is True
+    if parameters[4][1]:
+        channels+=1
+        
+    #########################################################################
+    #########################################################################    
+    #!!!Data loading
+    #########################################################################
+    #########################################################################
+    if grayscale:
+        form = "Grayscale"
+    else:
+        form = "RGB"
+    
+    
+    Data_toRun_directory = os.path.join(os.path.dirname(os.getcwd()) , "DataSet_toRun" , str(str(img_H)+"x"+str(img_W)+"_"+form+str_parameters))
+    #Create Data_path
+
+
+    model_architecture = f"{model_architecture_config}"
+    model_directory =  os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , form , str(str(img_H)+"x"+str(img_W)) , str("bs"+str(batch_size) + str_parameters)  )
+    model_history_directory = os.path.join(model_directory , "Model_history.csv")
+    with open(os.path.join(Data_toRun_directory , "dictionary.json"), 'r') as json_file:
+        dictionary = json.load(json_file)
     
     #Plot model training history
     Model_history = pd.read_csv(model_history_directory)
     General.Model_training_history_plot_CSV(Model_history)
     
     
-    if not Kaggle_competition_dataset:
+    if x_test and y_test is not None:
         #Create confusion matrix
         #Predict classes
         print("Predicting classes based on test set...")
@@ -466,7 +755,7 @@ def main():
         print("\nModel evaluation validation set:")
         model.evaluate(x_val, y_val)
         
-        if not Kaggle_competition_dataset:
+        if x_test and y_test is not None:
             #Evaluate model
             print("\nModel evaluation test set:")
             model.evaluate(x_test, y_test)
@@ -478,8 +767,7 @@ def main():
     
     
     
-if __name__ == "__main__":
-   main()   
+  
     
     
     

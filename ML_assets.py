@@ -1531,6 +1531,8 @@ class Architectures():
             x = main_block(x , filter_num = 320 , expansion_factor = 6 , kernel_size = 3 , stride = 1 , depth = 1)
             
             x = Conv2D(1280 , (1,1) , strides = 1 , padding = 'same')(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Activation('swish')(x)
 
             x = tf.keras.layers.GlobalAveragePooling2D()(x)
             
