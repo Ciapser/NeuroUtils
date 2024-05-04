@@ -33,6 +33,7 @@ def main():
     
     #Initial parameters
     DataBase_directory = config.Initial_params["DataBase_directory"]
+    Kaggle_competition_dataset = config.Initial_params["Kaggle_competition_dataset"]
     Stratification_test = config.Initial_params["Stratification_test"]
     grayscale = config.Initial_params["grayscale"]
     img_H = config.Initial_params["img_H"]
@@ -60,6 +61,11 @@ def main():
     patience = config.Model_parameters["patience"]
     batch_size = config.Model_parameters["batch_size"]
     evaluate = config.Model_parameters["batch_size"]
+    show_architecture = config.Model_parameters["show_architecture"]
+    
+    #Other parameters
+    if Kaggle_competition_dataset:
+        Competition_dictionary = config.Other_parameters["Competition_dictionary"]
     #########################################################################
     #########################################################################
     
@@ -117,9 +123,9 @@ def main():
         
         x_val = np.load(os.path.join(Data_toRun_directory , "x_val.npy"))
         y_val = np.load(os.path.join(Data_toRun_directory , "y_val.npy"))
-        
-        x_test = np.load(os.path.join(Data_toRun_directory , "x_test.npy"))
-        y_test = np.load(os.path.join(Data_toRun_directory , "y_test.npy"))
+        if not Kaggle_competition_dataset:
+            x_test = np.load(os.path.join(Data_toRun_directory , "x_test.npy"))
+            y_test = np.load(os.path.join(Data_toRun_directory , "y_test.npy"))
         
         with open(os.path.join(Data_toRun_directory , "dictionary.json"), 'r') as json_file:
             dictionary = json.load(json_file)
@@ -141,22 +147,48 @@ def main():
             #Create dataset and dictionary from photo database
             ml.DataSets.Create_Img_Classification_DataSet(DataBase_directory, img_H, img_W, Save_directory=Data_directory , grayscale = grayscale)
            
+        if not Kaggle_competition_dataset:    
+            #Data in folder is saved to reduce computation over and over,
+            #Data is merged and its amount is reduced if specified
+            x_train , y_train , dictionary = ml.DataSets.Load_And_Merge_DataSet(Data_directory , samples_per_class = reduced_set_size)
             
-        #Data in folder is saved to reduce computation over and over,
-        #Data is merged and its amount is reduced if specified
-        x_train , y_train , dictionary = ml.DataSets.Load_And_Merge_DataSet(Data_directory , samples_per_class = reduced_set_size)
-        
-        #Saved in less memory hungry variable, then divided by 255 to operate well in neural network
-        #x_train = x_train.astype(np.float32)
-        #y_train = y_train.astype(np.float16)
-        
-        #x_train /= 255
-        
-        #Split data into train, validation and test subsets, important to do it BEFORE augmentation
-        x_train, x_val, y_train, y_val = train_test_split(x_train , y_train,stratify = y_train , test_size=0.3)
-        x_val, x_test, y_val, y_test = train_test_split(x_val , y_val,stratify = y_val , test_size=0.66)
-        
-        
+            #Saved in less memory hungry variable, then divided by 255 to operate well in neural network
+            #x_train = x_train.astype(np.float32)
+            #y_train = y_train.astype(np.float16)
+            
+            #x_train /= 255
+            
+            #Split data into train, validation and test subsets, important to do it BEFORE augmentation
+            x_train, x_val, y_train, y_val = train_test_split(x_train , y_train,stratify = y_train , test_size=0.3)
+            x_val, x_test, y_val, y_test = train_test_split(x_val , y_val,stratify = y_val , test_size=0.66)
+            
+        else:
+            x ,_,_ = ml.DataSets.Load_And_Merge_DataSet(Data_directory , samples_per_class = reduced_set_size)
+            #Split data into train, validation and test subsets, important to do it BEFORE augmentation
+            #Read files
+            train_id = pd.read_csv( os.path.join(DataBase_directory , "train.csv"))
+            test_id = pd.read_csv( os.path.join(DataBase_directory , "test.csv"))
+            
+            test_id = test_id["Image"].tolist()
+            test_id = [x - 1 for x in test_id]
+            x_test = x[test_id]
+            
+            train_labels = train_id["Mushroom"].tolist()
+            train_id = train_id["Image"].tolist()
+            train_id = [x -1 for x in train_id]
+            x_train = x[train_id]
+            
+            y_train = ml.General.OneHot_decode(train_labels)
+            
+
+            dictionary = Competition_dictionary
+            
+            x_train, x_val, y_train, y_val = train_test_split(x_train , y_train,stratify = y_train , test_size=0.15)
+            del x
+            del train_id
+            del train_labels
+            del test_id
+            
         #Test of Stratification correctness
         if Stratification_test:
             print("Newly created dataset stratification test: \n")
@@ -243,9 +275,9 @@ def main():
         
         np.save( os.path.join(Data_toRun_directory , "x_val.npy" ) , x_val) 
         np.save( os.path.join(Data_toRun_directory , "y_val.npy" ) , y_val) 
-        
-        np.save( os.path.join(Data_toRun_directory , "x_test.npy" ) , x_test) 
-        np.save( os.path.join(Data_toRun_directory , "y_test.npy" ) , y_test) 
+        if not Kaggle_competition_dataset:
+            np.save( os.path.join(Data_toRun_directory , "x_test.npy" ) , x_test) 
+            np.save( os.path.join(Data_toRun_directory , "y_test.npy" ) , y_test) 
         
         # Write the JSON string to a file
         with open(os.path.join(Data_toRun_directory , "dictionary.json"), 'w') as json_file:
@@ -279,9 +311,9 @@ def main():
     
     x_val = x_val.astype(DataType) / 255
     y_val = y_val.astype(DataType)
-    
-    x_test = x_test.astype(DataType) / 255
-    y_test = y_test.astype(DataType)
+    if not Kaggle_competition_dataset:
+        x_test = x_test.astype(DataType) / 255
+        y_test = y_test.astype(DataType)
     #########################################################################
     #########################################################################
     
@@ -330,8 +362,10 @@ def main():
     optimizer = tf.keras.optimizers.Adam()
     #Compiling model
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-    #View summary of the model
-    model.summary()
+    if show_architecture:
+        model.summary()
+        tf.keras.utils.plot_model(model , os.path.join(os.path.dirname(os.getcwd()) , "Models_saved" , str(model_architecture) , "Model_architecture.png"))
+
     
     #########################################################################
     #########################################################################
@@ -404,14 +438,23 @@ def main():
     General.Model_training_history_plot_CSV(Model_history)
     
     
+    if not Kaggle_competition_dataset:
+        #Create confusion matrix
+        #Predict classes
+        print("Predicting classes based on test set...")
+        y_pred = model.predict(x_test)
+        
+        plt.figure()
+        ml.General.Conf_matrix_classification(y_test  ,y_pred , dictionary , normalize = True)
+    else:
+        #Create confusion matrix
+        #Predict classes
+        print("Predicting classes based on validation set...")
+        y_pred = model.predict(x_val)
+        
+        plt.figure()
+        ml.General.Conf_matrix_classification(y_val ,y_pred , dictionary , normalize = True)
     
-    #Create confusion matrix
-    #Predict classes
-    print("Predicting classes based on test set...")
-    y_pred = model.predict(x_test)
-    
-    plt.figure()
-    ml.General.Conf_matrix_classification(y_test  ,y_pred , dictionary , normalize = True)
     
 
     if evaluate:
@@ -423,9 +466,10 @@ def main():
         print("\nModel evaluation validation set:")
         model.evaluate(x_val, y_val)
         
-        #Evaluate model
-        print("\nModel evaluation validation set:")
-        model.evaluate(x_test, y_test)
+        if not Kaggle_competition_dataset:
+            #Evaluate model
+            print("\nModel evaluation test set:")
+            model.evaluate(x_test, y_test)
     
     
     #########################################################################

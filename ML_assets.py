@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import sklearn as skl
 import itertools
 import math
-
+from tensorflow.keras.layers import Conv2D, DepthwiseConv2D, BatchNormalization, Activation, Add, Input, GlobalAveragePooling2D, Reshape, Multiply, Dense, SpatialDropout2D
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
@@ -1474,7 +1474,87 @@ class Architectures():
 
 
 
+        @staticmethod
+        def EfficientNet_B0(shape , n_classes):
+            img_H , img_W , channels = shape
+            
+            inputs = tf.keras.layers.Input((img_H, img_W, channels))
+            
+            
 
+            
+            def mb_conv_block(inputs, filter_num, expansion_factor, kernel_size, stride):
 
+                # Expansion phase (Inverted Residual)
+                x = Conv2D(filter_num*expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(inputs) 
+                x = BatchNormalization()(x)
+                x = Activation('swish')(x)
+                
+                # Depthwise convolution phase
+                x = DepthwiseConv2D(kernel_size=kernel_size, strides=stride, padding='same', use_bias=False)(x)
+                x = BatchNormalization()(x)
+                x = Activation('swish')(x)
+                
+                # Squeeze and Excitation phase
+                se = GlobalAveragePooling2D()(x)
+                se = Reshape((1, 1, filter_num*expansion_factor))(se)
+                se = Conv2D(filter_num // expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(se) 
+                se = Conv2D(filter_num * expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(se) 
+                x = Multiply()([x, se])
+                
+                # Output phase (Linear) 
+                x = Conv2D(filters=filter_num, kernel_size=(1, 1), padding='same', use_bias=False)(x)    
+                x = BatchNormalization()(x)
+                x = SpatialDropout2D(0.2)(x)
+                # Add identity shortcut if dimensions match
+                if  x.shape[-1] ==inputs.shape[-1] and stride == 1: 
+                    x = Add()([x, inputs])
+                
+                return x
+            
+            def main_block(x , filter_num , expansion_factor , kernel_size , stride , depth):
+                for _ in range(depth):
+                    x = mb_conv_block(x, filter_num, expansion_factor, kernel_size, stride)
+                    if stride >1:
+                        stride = 1
+                return x
+                
+            
+            x = Conv2D(32, (3,3), strides = 2, padding = 'same')(inputs)
+            
+            x = main_block(x , filter_num = 16 , expansion_factor = 1 , kernel_size = 3 , stride = 1 , depth = 1)
+            x = main_block(x , filter_num = 24 , expansion_factor = 6 , kernel_size = 3 , stride = 2 , depth = 2)
+            x = main_block(x , filter_num = 40 , expansion_factor = 6 , kernel_size = 5 , stride = 2 , depth = 2)
+            x = main_block(x , filter_num = 80 , expansion_factor = 6 , kernel_size = 3 , stride = 2 , depth = 3)
+            x = main_block(x , filter_num = 112 , expansion_factor = 6 , kernel_size = 5 , stride = 1 , depth = 3)
+            x = main_block(x , filter_num = 192, expansion_factor = 6 , kernel_size = 5 , stride = 2 , depth = 4)
+            x = main_block(x , filter_num = 320 , expansion_factor = 6 , kernel_size = 3 , stride = 1 , depth = 1)
+            
+            x = Conv2D(1280 , (1,1) , strides = 1 , padding = 'same')(x)
+
+            x = tf.keras.layers.GlobalAveragePooling2D()(x)
+            
+            x = tf.keras.layers.Dense(1280)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Activation('swish')(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
+            
+            x = tf.keras.layers.Dense(512)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Activation('swish')(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
+            
+            x = tf.keras.layers.Dense(256)(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Activation('swish')(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
+   
+            
+            outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(x)
+            model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+            
+            return model
+            
+            
 
 
