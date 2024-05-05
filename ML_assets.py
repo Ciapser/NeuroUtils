@@ -158,12 +158,7 @@ class DataSets:
         
             
     def Load_And_Merge_DataSet(Data_directory , samples_per_class = None):
-        #############
-        #Second part
 
-
-
-        
         Classes_list  = os.listdir(Data_directory)
         n_classes = len(Classes_list)
         ClassSet=np.zeros((0,n_classes) , dtype = np.uint8)
@@ -204,7 +199,57 @@ class DataSets:
             
               
 
-
+    def Augment_classification_dataset(x, y, dataset_multiplier, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):
+        n_classes = y.shape[1]
+    
+        lenght = x.shape[0]
+        img_H = x.shape[1]
+        img_W = x.shape[2]
+        channels = x.shape[3]
+        
+        blank_class_y = np.zeros((0,n_classes) , dtype = np.uint8)
+        if channels == 1:
+            blank_class_x = np.zeros((0,img_H,img_W) , dtype = np.uint8)
+        else:
+            blank_class_x = np.zeros((0,img_H,img_W,channels) , dtype = np.uint8)
+            
+        if dataset_multiplier == 1 :
+            pass
+            print("No augmentation specified, loading only original images")
+        else:
+            print("Augmenting dataset:")
+            for p in range(dataset_multiplier - 1):
+            
+                x_aug = []
+                for i in tqdm(range(lenght)):
+                    if np.mean(x[i]) == 0:
+                        x[i,0,0,0] = 1
+                    aug_img = ImageProcessing.augment_image(x[i] , flipRotate , randBright , gaussian , denoise ,  contour)
+        
+                    x_aug.append(aug_img)
+                    
+                x_aug = np.asarray(x_aug)
+                
+                blank_class_x = np.concatenate( (blank_class_x , x_aug) )
+                
+                blank_class_y = np.concatenate( (blank_class_y , y) )
+            
+            #If contour is True
+            if contour:
+                x_aug = []
+                for i in tqdm(range(lenght)):
+                    aug_img = ImageProcessing.contour_mod(x[i] , density = 2)
+                    x_aug.append(aug_img)
+                x = np.asarray(x_aug)
+               
+                
+        
+        
+        
+            x = np.concatenate((x, blank_class_x))
+            y = np.concatenate((y, blank_class_y))
+        
+        return x , y
     
 class ImageProcessing:
     
@@ -341,7 +386,21 @@ class ImageProcessing:
         else:
             return np.array(img/255 , dtype = img_type)
         
+    #Combined function of augmentation to use
+    def augment_image(image , rand_bright = False , gaussian = False , denoise = False , flip_rotate = False , contour = False   ):
         
+        if rand_bright:
+            image = ImageProcessing.random_brightness(image)
+        if gaussian:
+            image = ImageProcessing.add_gaussian_noise(image , 0.3)
+        if denoise:
+            image = ImageProcessing.denoise_img(image)
+        if flip_rotate:
+            image = ImageProcessing.random_rotate_flip(image)
+        if contour:
+            image = ImageProcessing.contour_mod(image)
+            
+        return image        
 
 class General:
     
@@ -392,7 +451,6 @@ class General:
                 print("Loading trained weights to model and its training history...")
                 Model_history = pd.read_csv(model_history_directory)
                 model.load_weights(model_weights_directory)
-                
                 
                       
             except:
@@ -1480,32 +1538,29 @@ class Architectures():
             
             inputs = tf.keras.layers.Input((img_H, img_W, channels))
             
-            
-
-            
             def mb_conv_block(inputs, filter_num, expansion_factor, kernel_size, stride):
 
                 # Expansion phase (Inverted Residual)
-                x = Conv2D(filter_num*expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(inputs) 
+                x = Conv2D(filter_num*expansion_factor, kernel_size=(1, 1), padding='same')(inputs) 
                 x = BatchNormalization()(x)
                 x = Activation('swish')(x)
                 
                 # Depthwise convolution phase
-                x = DepthwiseConv2D(kernel_size=kernel_size, strides=stride, padding='same', use_bias=False)(x)
+                x = DepthwiseConv2D(kernel_size=kernel_size, strides=stride, padding='same')(x)
                 x = BatchNormalization()(x)
                 x = Activation('swish')(x)
                 
                 # Squeeze and Excitation phase
                 se = GlobalAveragePooling2D()(x)
                 se = Reshape((1, 1, filter_num*expansion_factor))(se)
-                se = Conv2D(filter_num // expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(se) 
-                se = Conv2D(filter_num * expansion_factor, kernel_size=(1, 1), padding='same', use_bias=False)(se) 
+                se = Conv2D(filter_num // (expansion_factor*4), kernel_size=(1, 1), padding='same')(se) 
+                se = Conv2D(filter_num * expansion_factor, kernel_size=(1, 1), padding='same')(se) 
                 x = Multiply()([x, se])
                 
                 # Output phase (Linear) 
-                x = Conv2D(filters=filter_num, kernel_size=(1, 1), padding='same', use_bias=False)(x)    
+                x = Conv2D(filters=filter_num, kernel_size=(1, 1), padding='same')(x)    
                 x = BatchNormalization()(x)
-                x = SpatialDropout2D(0.2)(x)
+                x = SpatialDropout2D(0.1)(x)
                 # Add identity shortcut if dimensions match
                 if  x.shape[-1] ==inputs.shape[-1] and stride == 1: 
                     x = Add()([x, inputs])
@@ -1531,10 +1586,13 @@ class Architectures():
             x = main_block(x , filter_num = 320 , expansion_factor = 6 , kernel_size = 3 , stride = 1 , depth = 1)
             
             x = Conv2D(1280 , (1,1) , strides = 1 , padding = 'same')(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = Activation('swish')(x)
+            x = tf.keras.layers.Dropout(0.05*6)(x)
 
             x = tf.keras.layers.GlobalAveragePooling2D()(x)
-            
-            x = tf.keras.layers.Dense(1280)(x)
+           
+            x = tf.keras.layers.Dense(256)(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = Activation('swish')(x)
             x = tf.keras.layers.Dropout(0.05*6)(x)
@@ -1548,7 +1606,7 @@ class Architectures():
             x = tf.keras.layers.BatchNormalization()(x)
             x = Activation('swish')(x)
             x = tf.keras.layers.Dropout(0.05*6)(x)
-   
+
             
             outputs = tf.keras.layers.Dense(n_classes, activation='softmax')(x)
             model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
