@@ -1,6 +1,6 @@
 #Downloading ml assets from library folder
-import ML_assets as ml
-import Architectures as arch
+from NeuroUtils import ML_assets as ml
+from NeuroUtils import Architectures as arch
 #Importing rest of the libraries
 import os
 import tensorflow as tf
