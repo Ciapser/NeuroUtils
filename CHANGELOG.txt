@@ -1,4 +1,22 @@
 =====================================================================================
+Version 0.1.3
+Bugfix of pip installation
+
+To fix, add:
+Finish "Kaggle dataset" type loading, so this type data structure can be loaded simply from 
+just folder directory
+
+Dataset is incorrectly saved in packages folder and not in executable folder
+=====================================================================================
+Version 0.1.2
+Modified old standard of setup.py to pyproject.toml, prepared for uploading into PyPi
+
+To fix, add:
+Finish "Kaggle dataset" type loading, so this type data structure can be loaded simply from 
+just folder directory
+
+Dataset is incorrectly saved in packages folder and not in executable folder
+=====================================================================================
 Version 0.1.1
 Modified Classification Core and renamed it to Core. Added project selection class, 
 pepared for future project class in Core module. 
