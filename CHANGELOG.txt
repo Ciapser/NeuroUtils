@@ -1,0 +1,14 @@
+=====================================================================================
+Version 0.1.1
+Modified Classification Core and renamed it to Core. Added project selection class, 
+pepared for future project class in Core module. 
+Added to this class classification project class which allows to manage this type of
+projects. Small fixes in prints layout etc.
+
+To fix,add:
+Finish "Kaggle dataset" type loading, so this type data structure can be loaded simply from 
+just folder directory
+
+=====================================================================================
+Version 0.1
+Initial version of the library

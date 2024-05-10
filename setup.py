@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 
 setup(
     name='NeuroUtils',
-    version='0.1',
+    version='0.1.1',
     description='Library for neural network projects organisation',
     author='Sebastian Borukało',
-    author_email='Sebastian.Borukalo@gmail.com',
+    author_email='Ciapserr@gmail.com',
     packages=find_packages(),
     install_requires=[
         'opencv-python==4.9.0.80',

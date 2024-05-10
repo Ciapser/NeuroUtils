@@ -1,1 +1,1 @@
-__all__ = ['ML_assets' , 'Classification_core' , 'Architectures']
+__all__ = ['ML_assets' , 'Core' , 'Architectures']
