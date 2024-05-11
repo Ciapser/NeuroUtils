@@ -3,6 +3,7 @@ from NeuroUtils import ML_assets as ml
 from NeuroUtils import Architectures as arch
 #Importing rest of the libraries
 import os
+import sys
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
@@ -138,7 +139,7 @@ class Utils:
         #Choosing optimizer
         optimizer = tf.keras.optimizers.Adam()
         #Compiling model
-        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['aUtilsuracy'])
+        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
         if show_architecture:
             model.summary()
         
@@ -275,6 +276,7 @@ class Project:
     class Classification_Project:
         def  __init__(self,config):
             #Low level constants
+            self.PROJECT_DIRECTORY = os.path.dirname(os.path.abspath(sys.argv[0]))
             #Initial
             self.DATABASE_DIRECTORY = config.Initial_params["DataBase_directory"]
             self.KAGGLE_SET = config.Initial_params["Kaggle_set"]
@@ -311,10 +313,9 @@ class Project:
             self.PARAM_MARK = "__" + "_".join(["1" if x else "0" for x in [self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR]])
     
                     
-            self.DATA_DIRECTORY = os.path.join(os.path.dirname(os.path.realpath(__file__)) , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
-            self.DATAPROCESSED_DIRECTORY = os.path.join(os.path.dirname(os.path.realpath(__file__)) , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
-            self.MODEL_DIRECTORY =  os.path.join(os.path.dirname(os.path.realpath(__file__)) , "Models_saved" , str(self.MODEL_ARCHITECTURE) , self.FORM , str(str(self.IMG_H)+"x"+str(self.IMG_W)) , str("bs"+str(self.BATCH_SIZE) + self.PARAM_MARK)  )
-    
+            self.DATA_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
+            self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
+            self.MODEL_DIRECTORY =  os.path.join(self.PROJECT_DIRECTORY , "Models_saved" , str(self.MODEL_ARCHITECTURE) , self.FORM , str(str(self.IMG_H)+"x"+str(self.IMG_W)) , str("bs"+str(self.BATCH_SIZE) + self.PARAM_MARK)  )
             
             
             
