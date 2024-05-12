@@ -151,7 +151,64 @@ class DataSets:
         
         
         print("----------------------\nTime took compiling images:",round(timer()-timer_start,2),"\n----------------------")
-        
+
+
+    def Create_Img_Classification_DataSet_CSV(Database_directory , img_H , img_W, Save_directory):
+        Set_list  = os.listdir(Database_directory)
+
+        for Set in Set_list:
+            try:
+                directory = os.path.join(Database_directory , str(Set))
+                data = pd.read_csv(directory)
+                #Save dataframe directly into data folder if its sample submission
+                if str(Set) == "sample_submission.csv":
+                    data.to_csv(os.path.join(Save_directory , Set),index =False)
+                    continue
+                    
+                #Checking if label is present in data, it indicates its not test data
+                if 'label' in data.columns:
+                    labels = np.array(data["label"].values , dtype = int)
+                    y = General.OneHot_decode(labels)
+                    data.drop(columns=['label'], inplace=True)
+                
+                else:
+                    y = None    
+                lenght = len(data.iloc[0,:].values)
+                
+                if img_H*img_W == lenght:
+                    
+                    x = []
+                    description = str("Preparing "+Set)
+                    for k in tqdm(range(len(data)) , desc = description):
+                        img = np.zeros((img_H,img_W),dtype = np.uint8)
+                        for i in range(img_H):
+                            img[i,:] = data.iloc[k,i*img_W:(i+1)*img_W]
+                        x.append(img)
+                    x = np.array(x)
+                    
+                    
+                    
+                    
+                    x_set_save_dir = str("x_"+str(Set.replace(".csv",""))+".npy")
+                    y_set_save_dir = str("y_"+str(Set.replace(".csv",""))+".npy")
+                    
+                    np.save(os.path.join(Save_directory , x_set_save_dir), x)
+                    np.save(os.path.join(Save_directory , y_set_save_dir), y)
+                    
+                    #Making list of sets which are done #2
+                    print("Done")
+                    print("----------------------------------------------")
+                    
+                    
+                    
+                else:
+                    print("Mismatch in provided image resolution and expected one. By default if square it should be:",img_H,"x",img_W)
+            
+            except Exception as e:
+                #Print Exception
+                print("\nCould not load file: ", Set)
+                print(e)
+          
        
         
             
@@ -199,11 +256,13 @@ class DataSets:
 
     def Augment_classification_dataset(x, y, dataset_multiplier, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):
         n_classes = y.shape[1]
-    
         lenght = x.shape[0]
         img_H = x.shape[1]
         img_W = x.shape[2]
-        channels = x.shape[3]
+        try:
+            channels = x.shape[3]
+        except:
+            channels = 1
         
         blank_class_y = np.zeros((0,n_classes) , dtype = np.uint8)
         if channels == 1:
@@ -414,7 +473,7 @@ class General:
                 best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
         
                 print("Found existing model trained for ",starting_epoch," epochs")
-                print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_acc,)
+                print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
                 
                 print("Do you want to continue training? \nType 'y' for yes and 'n' for no \n")
                 user_input = input()

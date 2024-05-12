@@ -1,4 +1,9 @@
 =====================================================================================
+Version 0.1.4
+CSV addon, dataleak fix
+
+Added type of csv imgs to load, fixed dataleak when augmenting images. Fixed dataset incorrectly saving
+=====================================================================================
 Version 0.1.3
 Bugfix of pip installation
 

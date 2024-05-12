@@ -1,6 +1,6 @@
 #Downloading ml assets from library folder
-from NeuroUtils import ML_assets as ml
-from NeuroUtils import Architectures as arch
+import ML_assets as ml
+import Architectures as arch
 #Importing rest of the libraries
 import os
 import sys
@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 
 class Utils:
     
-    def Initialize_data(DataBase_directory, Data_directory, img_H, img_W, grayscale):
+    def Initialize_data(DataBase_directory, Data_directory, img_H, img_W, grayscale, Load_from_CSV):
     
         
         if not os.path.isdir(Data_directory):
@@ -24,16 +24,27 @@ class Utils:
             
         if len(os.listdir(Data_directory)) == 0:
             print("There is no Dataset Initialized, initializing Dataset...")
-            ml.DataSets.Create_Img_Classification_DataSet(DataBase_directory, img_H, img_W, Save_directory=Data_directory , grayscale = grayscale)
+            if Load_from_CSV:
+                ml.DataSets.Create_Img_Classification_DataSet_CSV(DataBase_directory, img_H, img_W, Save_directory=Data_directory)
+            else:
+                ml.DataSets.Create_Img_Classification_DataSet(DataBase_directory, img_H, img_W, Save_directory=Data_directory , grayscale = grayscale)
         else:
             print("Found initialized Dataset")
             database_list = os.listdir(DataBase_directory)
             data_list = os.listdir(Data_directory)
+            if Load_from_CSV:
+                data_list = [element.replace(".csv" , "") for element in data_list] 
+                database_list = ['sample_submission', 'x_test','x_train', 'y_test','y_train']
+                
             data_list_clean = [element.replace(".npy" , "") for element in data_list] 
-    
+            
+            
             if database_list != data_list_clean:
                 print("Dataset is lacking some of the classes, initializing Dataset again")
-                ml.DataSets.Create_Img_Classification_DataSet(DataBase_directory, img_H, img_W, Save_directory=Data_directory , grayscale = grayscale)
+                if Load_from_CSV:
+                    ml.DataSets.Create_Img_Classification_DataSet_CSV(DataBase_directory, img_H, img_W, Save_directory=Data_directory)
+                else:
+                    ml.DataSets.Create_Img_Classification_DataSet(DataBase_directory, img_H, img_W, Save_directory=Data_directory , grayscale = grayscale)
             else:
                 print("Dataset is initialized correctly!")
                    
@@ -76,20 +87,24 @@ class Utils:
                
     
         print("There is no Dataset processed, processing Dataset...")
-        print("Augmentation of images...")
-        if not (flipRotate and randBright and gaussian and denoise and contour) and dataset_multiplier >1:
-            print("\nNo augmentation specified, dataset will be just multiplied",dataset_multiplier, "times")
-            
-        if not (flipRotate and randBright and gaussian and denoise and contour) and dataset_multiplier <1:
-            print("\nNo augmentation, skipping...")
-        x,y = ml.DataSets.Augment_classification_dataset(x, y, dataset_multiplier, flipRotate, randBright, gaussian, denoise, contour )            
-        
+
         if Kaggle_set:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.2 ,stratify = y, shuffle = True)
         else:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.3 ,stratify = y, shuffle = True)
             x_val , x_test , y_val , y_test = train_test_split(x_val,y_val,test_size = 0.66 ,stratify = y_val, shuffle = True)
+        
+        print("Augmentation of images...")
+        if (not (flipRotate and randBright and gaussian and denoise and contour)) and dataset_multiplier >1:
+            print("\nNo augmentation specified, dataset will be just multiplied",dataset_multiplier, "times")
             
+        if not (flipRotate and randBright and gaussian and denoise and contour) and dataset_multiplier <1:
+            print("\nNo augmentation, skipping...")
+        x_train,y_train = ml.DataSets.Augment_classification_dataset(x_train, y_train, dataset_multiplier, flipRotate, randBright, gaussian, denoise, contour )            
+            
+        
+        
+        
         if not Kaggle_set:
             np.save(os.path.join(DataProcessed_directory ,"x_train.npy") , x_train)
             np.save(os.path.join(DataProcessed_directory ,"y_train.npy") , y_train)
@@ -148,7 +163,7 @@ class Utils:
         return model
     
         
-    def Initialize_weights_and_training(x_train, y_train, model, model_directory, model_architecture, train, epochs, patience, batch_size, x_val=None, y_val=None, device = "CPU:0"):    
+    def Initialize_weights_and_training(x_train, y_train, model, model_directory, model_architecture, train, epochs, patience, batch_size,min_delta, x_val=None, y_val=None, device = "CPU:0"):    
         #!!! Model training
         #########################################################################
         #########################################################################
@@ -177,7 +192,7 @@ class Utils:
                         #Stop if no increase in accuracy after x epochs
                         tf.keras.callbacks.EarlyStopping(patience=patience, 
                                                          monitor='val_accuracy',
-                                                         min_delta=0.01),
+                                                         min_delta=min_delta),
                         #Checkpoint model if performance is increased
                         tf.keras.callbacks.ModelCheckpoint(filepath = model_weights_directory  ,
                                                         monitor = "val_accuracy",
@@ -280,9 +295,11 @@ class Project:
             #Initial
             self.DATABASE_DIRECTORY = config.Initial_params["DataBase_directory"]
             self.KAGGLE_SET = config.Initial_params["Kaggle_set"]
+            self.CSV_LOAD = config.Initial_params["Load_from_CSV"]
             self.IMG_H = config.Initial_params["img_H"]
             self.IMG_W = config.Initial_params["img_W"]
             self.GRAYSCALE= config.Initial_params["grayscale"]
+            self.DATA_TYPE = config.Initial_params["DataType"]
             
             #Augment
             self.REDUCED_SET_SIZE = config.Augment_params["reduced_set_size"]
@@ -301,6 +318,7 @@ class Project:
             self.EPOCHS = config.Model_parameters["epochs"]
             self.PATIENCE = config.Model_parameters["patience"]
             self.BATCH_SIZE = config.Model_parameters["batch_size"]
+            self.MIN_DELTA = config.Model_parameters["min_delta"]
             self.EVALUATE = config.Model_parameters["evaluate"]
             
             #High level constants
@@ -329,7 +347,7 @@ class Project:
             Resized and cropped without loosing much aspect ratio, r parameter decides above what proportions of edges 
             image will be cropped to square instead of squeezed""" 
             
-            Utils.Initialize_data(self.DATABASE_DIRECTORY, self.DATA_DIRECTORY, self.IMG_H, self.IMG_W, self.GRAYSCALE)
+            Utils.Initialize_data(self.DATABASE_DIRECTORY, self.DATA_DIRECTORY, self.IMG_H, self.IMG_W, self.GRAYSCALE , self.CSV_LOAD)
             ########################################################
         def Load_and_merge_data(self):
             """Loading dataset to memory from data directory in project folder, sets can be reduced to equal size
@@ -344,8 +362,27 @@ class Project:
         def Process_data(self):
             #3
             ########################################################
-            self.X_TRAIN , self.Y_TRAIN, self.X_VAL , self.Y_VAL , self.X_TEST , self.Y_TEST = Utils.Process_Data(self.X_TRAIN, self.Y_TRAIN, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.KAGGLE_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            if self.KAGGLE_SET:
+                self.X_TRAIN , self.Y_TRAIN, self.X_VAL , self.Y_VAL = Utils.Process_Data(self.X_TRAIN, self.Y_TRAIN, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.KAGGLE_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            
+            else:
+                self.X_TRAIN , self.Y_TRAIN, self.X_VAL , self.Y_VAL , self.X_TEST , self.Y_TEST = Utils.Process_Data(self.X_TRAIN, self.Y_TRAIN, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.KAGGLE_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            
+            try:
+                self.X_TRAIN = np.array(self.X_TRAIN/255 , dtype = self.DATA_TYPE)
+                self.Y_TRAIN = np.array(self.Y_TRAIN , dtype = self.DATA_TYPE)
+                
+                self.X_VAL = np.array(self.X_VAL/255 , dtype = self.DATA_TYPE)
+                self.Y_VAL = np.array(self.Y_VAL , dtype = self.DATA_TYPE)
+                
+                self.X_TEST = np.array(self.X_TEST/255 , dtype = self.DATA_TYPE)
+                self.Y_TEST = np.array(self.Y_TEST , dtype = self.DATA_TYPE)
+            except Exception as e:
+                print("Could not standarize data:",e)
+            
+            
             ########################################################
+            
     
         def Initialize_model_from_library(self):
             #4
@@ -383,6 +420,7 @@ class Project:
                                                        epochs = self.EPOCHS,
                                                        patience = self.PATIENCE,
                                                        batch_size = self.BATCH_SIZE,
+                                                       min_delta= self.MIN_DELTA,
                                                        device = self.DEVICE
                                                        )
             ########################################################
@@ -402,4 +440,15 @@ class Project:
                                   self.Y_TEST
                                   )
             ######################################################## 
+            
+        def Generate_sample_submission(self, filepath = None):
+            if filepath is None:
+                sample_submission = pd.read_csv(os.path.join(self.DATA_DIRECTORY , "sample_submission.csv")) 
+
+            #img_id = sample_submission.columns[0]
+            label = sample_submission.columns[1]
+
+            label_array = np.argmax(self.MODEL.predict(self.X_TEST), axis = 1)
+            sample_submission[label] = label_array
+            return sample_submission
     
