@@ -1,9 +1,11 @@
 #Downloading ml assets from library folder
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
 import ML_assets as ml
 import Architectures as arch
 #Importing rest of the libraries
-import os
-import sys
+
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
