@@ -449,8 +449,10 @@ class Project:
 
             #img_id = sample_submission.columns[0]
             label = sample_submission.columns[1]
-
-            label_array = np.argmax(self.MODEL.predict(self.X_TEST), axis = 1)
+            try:
+                label_array = np.argmax(self.MODEL.predict(self.X_TEST), axis = 1)
+            except:
+                label_array = self.Y_TEST
             sample_submission[label] = label_array
             return sample_submission
     
