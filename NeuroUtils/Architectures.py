@@ -664,3 +664,67 @@ class Img_Classification():
     
         model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
         return model    
+    
+    
+    
+    
+    
+class Gan():
+    
+    @staticmethod
+    def Test_generator_28(latent_dim):
+        inputs = tf.keras.layers.Input((latent_dim))
+        # foundation for 7x7 image
+        n_nodes = 128 * 7 * 7
+        x = tf.keras.layers.Dense(n_nodes)(inputs)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        x = tf.keras.layers.Reshape((7, 7, 128))(x)
+        # upsample to 14x14
+        x = tf.keras.layers.Conv2DTranspose(256, (4,4), strides=(2,2), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        
+        x = tf.keras.layers.Conv2D(256, (4,4), strides=(1,1), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        # upsample to 28x28
+        x = tf.keras.layers.Conv2DTranspose(256, (4,4), strides=(2,2), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        
+        x = tf.keras.layers.Conv2D(128, (4,4), strides=(1,1), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        
+        outputs = tf.keras.layers.Conv2D(1, (7,7), activation='tanh', padding='same')(x)
+
+        model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+        
+        return model
+    
+    
+    def Test_discriminator_28(in_shape=(28,28,1)):
+        inputs = tf.keras.layers.Input(in_shape)
+        
+        x = tf.keras.layers.Conv2D(128, (3,3), strides=(2, 2), padding='same')(inputs)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        x = tf.keras.layers.Dropout(0.4)(x)
+        
+        x = tf.keras.layers.Conv2D(128, (3,3), strides=(1, 1), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        x = tf.keras.layers.Dropout(0.4)(x)
+        
+        x = tf.keras.layers.Conv2D(256, (3,3), strides=(2, 2), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        x = tf.keras.layers.Dropout(0.4)(x)
+        
+        x = tf.keras.layers.Conv2D(256, (3,3), strides=(1, 1), padding='same')(x)
+        x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+        x = tf.keras.layers.Dropout(0.4)(x)
+        
+        x = tf.keras.layers.GlobalAveragePooling2D()(x)
+        
+        outputs = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+        
+        model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+        
+        return model
+
+
+

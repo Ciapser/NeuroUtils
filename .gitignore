@@ -1,3 +1,7 @@
 dist/
 
 NeuroUtils.egg-info/
+
+NeuroUtils/__pycache__/
+
+Tests/__pycache__/

@@ -218,8 +218,14 @@ class DataSets:
         n_classes = len(Classes_list)
         ClassSet=np.zeros((0,n_classes) , dtype = np.uint8)
         Dictionary = []
-        
-        temporary_sheet = np.load(os.path.join(Data_directory , Classes_list[0]) , mmap_mode='r')
+        try:
+            temporary_sheet = np.load(os.path.join(Data_directory , Classes_list[0]) , mmap_mode='r')
+        except:
+            try:
+                temporary_sheet = np.load(os.path.join(Data_directory , Classes_list[0]) , mmap_mode='r',allow_pickle = True)
+            except:
+                print("Unsuported file in folde, pergaps some sample submission? If you already have dataset set to x_train,x_val, skip this function and go to Process_data")
+                return
         h = temporary_sheet.shape[1]
         w = temporary_sheet.shape[2]
         channels = temporary_sheet.shape[3]
@@ -461,21 +467,29 @@ class ImageProcessing:
 
 class General:
     
-    def Load_model_check_training_progress(model , train , model_weights_directory, model_history_directory):
+    def Load_model_check_training_progress(model , train , epochs_to_train, model_weights_directory, model_history_directory):
         starting_epoch = None
         if train:
             try:
                 Model_history = pd.read_csv(model_history_directory)
                 starting_epoch = Model_history["epoch"].iloc[-1]
-                best_val_acc = Model_history["val_accuracy"].idxmax()
-                
-                best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
-                best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
+                try:
+                    best_val_acc = Model_history["val_accuracy"].idxmax()
+                    
+                    best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
+                    best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
+                except:
+                    print("Could not load model scores...")
         
                 print("Found existing model trained for ",starting_epoch," epochs")
-                print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
-                
-                print("Do you want to continue training? \nType 'y' for yes and 'n' for no \n")
+                try:
+                    print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
+                except:
+                    print("No score available")
+                if starting_epoch == epochs_to_train:
+                    print("\nTraining of this model is completed, do you want to load this model? \nType 'y' for yes and 'n' for no \n")
+                else:
+                    print("\nDo you want to continue training? \nType 'y' for yes and 'n' for no \n")
                 user_input = input()
         
                 while True:
@@ -644,5 +658,65 @@ class General:
             print("Class",i,"share: ")
             print("Training Set: ", round(sum(labels[:,i])/len(labels),2) )
 
- 
+
+    #Generating real samples from dataset
+    def generate_real_samples(dataset, n_samples):
+        """
+        Taking n random samples from real dataset
+
+        Args:
+            dataset (array):   Dataset to take real samples from
+            n_samples (int)    Amount of samples to take from dataset
+
+
+        Returns:
+            x (array): array of real samples from dataset
+            y (array): array of ones (labels of real samples)
+        """  
+        #Generate random indexes
+        idx = np.random.randint(0, len(dataset), n_samples)
+        #Get random images from dataset
+        x = dataset[idx]
+        #generating labels for real class
+        y = np.ones((n_samples, 1))
+        return x, y   
+
         
+    #Generating fake samples using noise and generator
+    def generate_fake_samples(gan_generator, latent_dim, n_samples):
+        """
+        Generating n samples using generator
+    
+        Args:
+            gan_generator (compiled model):     Trained generator model
+            latent_dim (array):                 number of parameters to create random noise, it serves as input to the generator
+            n_samples (int):                    Amount of samples to generate
+    
+    
+        Returns:
+            x (array): array of generated samples
+            y (array): array of zeros (labels of fake samples)
+        """ 
+        #generate noise as input for generator
+        noise = np.random.normal(0, 1, (n_samples, latent_dim))
+        # predict outputs
+        x = gan_generator.predict(noise)
+        if len(x.shape) == 4:
+            x = np.squeeze(x, axis = -1)
+        # create 'fake' class labels (0)
+        y = np.zeros((n_samples, 1))
+        return x, y
+    
+
+    def delete_files_in_folder(folder_path):
+        # Iterate over all files in the folder
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            # Check if the path is a file (not a subdirectory)
+            if os.path.isfile(file_path):
+                # Delete the file
+                os.remove(file_path)
+    
+    
+    
+    

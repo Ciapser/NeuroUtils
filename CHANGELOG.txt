@@ -1,4 +1,11 @@
 =====================================================================================
+Version 0.1.6
+Gan Project module addon
+
+Added project for gans network, it operates on simple predefined networks. Gan project
+share some common functions with previous one, but also have its own like image history,
+or interpolation showcase
+=====================================================================================
 Version 0.1.4
 CSV addon, dataleak fix
 
