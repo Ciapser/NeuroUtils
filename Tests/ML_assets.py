@@ -467,21 +467,29 @@ class ImageProcessing:
 
 class General:
     
-    def Load_model_check_training_progress(model , train , model_weights_directory, model_history_directory):
+    def Load_model_check_training_progress(model , train , epochs_to_train, model_weights_directory, model_history_directory):
         starting_epoch = None
         if train:
             try:
                 Model_history = pd.read_csv(model_history_directory)
                 starting_epoch = Model_history["epoch"].iloc[-1]
-                best_val_acc = Model_history["val_accuracy"].idxmax()
-                
-                best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
-                best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
+                try:
+                    best_val_acc = Model_history["val_accuracy"].idxmax()
+                    
+                    best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
+                    best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
+                except:
+                    print("Could not load model scores...")
         
                 print("Found existing model trained for ",starting_epoch," epochs")
-                print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
-                
-                print("Do you want to continue training? \nType 'y' for yes and 'n' for no \n")
+                try:
+                    print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
+                except:
+                    print("No score available")
+                if starting_epoch == epochs_to_train:
+                    print("\nTraining of this model is completed, do you want to load this model? \nType 'y' for yes and 'n' for no \n")
+                else:
+                    print("\nDo you want to continue training? \nType 'y' for yes and 'n' for no \n")
                 user_input = input()
         
                 while True:
@@ -698,3 +706,17 @@ class General:
         # create 'fake' class labels (0)
         y = np.zeros((n_samples, 1))
         return x, y
+    
+
+    def delete_files_in_folder(folder_path):
+        # Iterate over all files in the folder
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            # Check if the path is a file (not a subdirectory)
+            if os.path.isfile(file_path):
+                # Delete the file
+                os.remove(file_path)
+    
+    
+    
+    

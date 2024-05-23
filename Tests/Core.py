@@ -14,6 +14,10 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from contextlib import redirect_stdout
+from ipywidgets import interact, IntSlider
+from IPython.display import display
+from matplotlib.widgets import Slider
+import math
 
 class Utils:
     
@@ -49,12 +53,13 @@ class Utils:
             data_list = os.listdir(Data_directory)
             if Load_from_CSV:
                 data_list = [element.replace(".csv" , "") for element in data_list] 
-                database_list = ['sample_submission', 'x_test','x_train', 'y_test','y_train']
+                database_list = ['x_test','x_train', 'y_test','y_train']
                 
-            data_list_clean = [element.replace(".npy" , "") for element in data_list] 
+            data_list_clean = [element.replace(".npy" , "") for element in data_list]
             
             
-            if database_list != data_list_clean:
+            
+            if all(elem in data_list for elem in database_list):
                 print("Dataset is lacking some of the classes, initializing Dataset again")
                 if Load_from_CSV:
                     ml.DataSets.Create_Img_Classification_DataSet_CSV(DataBase_directory, img_H, img_W, Save_directory=Data_directory)
@@ -190,8 +195,10 @@ class Utils:
         else:
             if generator_class is None:
                 print("Could not find generator class named: ",g_arch)
+                return
             if discriminator_class is None:
                 print("Could not find discriminator class named: ",d_arch)
+                return
                 
         gan_discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5), metrics=['accuracy'])
 
@@ -208,21 +215,6 @@ class Utils:
         return gan_model, gan_generator, gan_discriminator
             
 
-    #Saving progress each n epochs to folder
-    def save_plot(examples,directory, epoch, n=10):
-        # plot images
-        for i in range(n * n):
-            # define subplot
-            plt.subplot(n, n, 1 + i)
-            # turn off axis
-            plt.axis('off')
-            # plot raw pixel data
-            plt.imshow(examples[i, :, :])
-            # save plot to file
-        filename = os.path.join(directory, 'Epoch_%03d.png' %epoch )
-    
-        plt.savefig(filename)
-        plt.close()
         
     def Initialize_weights_and_training(x_train, y_train, model, model_directory, model_architecture, train, epochs, patience, batch_size,min_delta, x_val=None, y_val=None, device = "CPU:0"):    
         #!!! Model training
@@ -237,7 +229,7 @@ class Utils:
         model_weights_directory = os.path.join(model_directory , model_name)
         model_history_directory = os.path.join(model_directory , "Model_history.csv")
         
-        model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, model_weights_directory, model_history_directory)
+        model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, epochs, model_weights_directory, model_history_directory)
         
     
              
@@ -291,80 +283,7 @@ class Utils:
         #########################################################################
         return model
     
-
-    def Initialize_weights_and_training_gan(dataset, gan_model, gan_generator, gan_discriminator, train, generator_architecture, discriminator_architecture, model_directory, epochs, batch_size, latent_dim, sample_interval,device = "CPU:0"):
-        #Check if directory of trained model is present, if not, create one 
-        if not os.path.isdir(model_directory):
-            os.makedirs(model_directory)
-            print("Creating model directory storage directory...\n")
-        model_architecture = str(str(generator_architecture)+" __ "+str(discriminator_architecture))        
-        model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
-        model_weights_directory = os.path.join(model_directory , model_name)
-        model_history_directory = os.path.join(model_directory , "Model_history.csv")
-        
-        model , train , starting_epoch = ml.General.Load_model_check_training_progress(gan_model, train, model_weights_directory, model_history_directory)
-        
-        
-             
-        if train:
-            #Create callback function to save best performing model
-            
-            if starting_epoch == 0:
-                csv_append = False
-            else:
-                csv_append = True
-                
-            timer_start = timer()
-            with tf.device(device):
-                for epoch in range(epochs):
-                    print("\nEpoch:",epoch)
-                    steps_per_epoch = len(dataset) // batch_size
-                    for step in tqdm(range(steps_per_epoch)):
-                        with redirect_stdout(open(os.devnull, 'w')):
-                            #1
-                            #Taking batch of real samples from dataset
-                            x_real, y_real = ml.General.generate_real_samples(dataset, batch_size//2)
-                            
-                            #2
-                            #Generating batch of fake samples from generator
-                            x_fake , y_fake = ml.General.generate_fake_samples(gan_generator, latent_dim, batch_size//2)
-                            
-                            #3
-                            #Preparing combined real-fake set for discriminator to train
-                            x = np.vstack((x_real,x_fake))
-                            y = np.vstack((y_real, y_fake))
-                            
-                            #4
-                            #Training discriminator
-                            discriminator_loss = gan_discriminator.train_on_batch(x,y)
-                            
-                            #5
-                            #Update generator via discriminator error
-                            noise = np.random.normal(0, 1, (batch_size, latent_dim))
-                            ones = np.ones((batch_size, 1))
-                            generator_loss = gan_model.train_on_batch(noise, ones)
-                            
-                            #gan_callback()
-                    # Print the progress
-                    sys.stdout.write(f"[D loss: {discriminator_loss[0]:.3f} | D acc: {discriminator_loss[1]:.3f}] [G loss: {generator_loss:.3f}]")    
-                   
-                    # Save generated images every sample_interval
-                    if epoch % sample_interval == 0:
-                        print('save Plot, epoch:',epoch)
-                        Utils.save_plot(x_fake,"Images",epoch,8)
-                
-                
-                print("Time took to train model: ",round(timer()-timer_start),2)    
-                
-            
-            #Save the best achieved model
-            print("Loading model which was performing best during training...\n")
-            model.load_weights(model_weights_directory)   
-
-
-            return model
-        
-            
+    
 
        
     def Initialize_Results(model,model_directory, dictionary,evaluate, x_train = None ,y_train = None ,x_val = None , y_val = None , x_test = None , y_test = None):    
@@ -629,6 +548,7 @@ class Project:
             self.LATENT_DIM = config.Model_parameters["latent_dim"]
             self.BATCH_SIZE = config.Model_parameters["batch_size"]
             self.SAMPLE_INTERVAL = config.Model_parameters["sample_interval"]
+            self.SAMPLE_NUMBER = config.Model_parameters["sample_number"]
             #self.MIN_DELTA = config.Model_parameters["min_delta"]
             self.EVALUATE = config.Model_parameters["evaluate"]
             
@@ -645,8 +565,13 @@ class Project:
                     
             self.DATA_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
             self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
-            self.MODEL_DIRECTORY =  os.path.join(self.PROJECT_DIRECTORY , "Models_saved" , str(str(self.GENERATOR_ARCHITECTURE)+" __ "+str(self.DISCRIMINATOR_ARCHITECTURE)) , self.FORM , str(str(self.IMG_H)+"x"+str(self.IMG_W)) , str("bs"+str(self.BATCH_SIZE) + self.PARAM_MARK)  )
             
+            self.MODEL_ARCHITECTURE = ''.join([self.GENERATOR_ARCHITECTURE , "__" , self.DISCRIMINATOR_ARCHITECTURE])
+            self.MODEL_DIRECTORY =  os.path.join(self.PROJECT_DIRECTORY , "Models_saved" , self.MODEL_ARCHITECTURE , self.FORM , str(str(self.IMG_H)+"x"+str(self.IMG_W)) , str("bs"+str(self.BATCH_SIZE) + self.PARAM_MARK)  )
+            self.MODEL_NAME = str(self.MODEL_ARCHITECTURE + "_bs"+str(self.BATCH_SIZE)+".keras")
+            
+            self.MODEL_WEIGHTS_DIRECTORY = os.path.join(self.MODEL_DIRECTORY , self.MODEL_NAME)
+            self.MODEL_HISTORY_DIRECTORY = os.path.join(self.MODEL_DIRECTORY , "Model_history.csv")
         ########################################################    
             
         def __str__(self):
@@ -679,6 +604,7 @@ class Project:
                 self.N_CLASSES = len(self.DICTIONARY)
                 
             else:
+                #To add searching for key words such as test, x, train etc. as for now just name csvs like train, test
                 self.X_TRAIN = np.load(os.path.join(self.DATA_DIRECTORY , "x_train.npy"))
                 self.Y_TRAIN = np.load(os.path.join(self.DATA_DIRECTORY , "y_train.npy"))
                 
@@ -741,59 +667,335 @@ class Project:
                                                                                       show_architecture = self.SHOW_ARCHITECTURE
                                                                                       )
             
+            
+ 
+        def Callback(self,current_epoch, constant_noise):
+            #1    
+            #Saving npy images   
+            if current_epoch % self.SAMPLE_INTERVAL == 0:
+                if not os.path.isdir(os.path.join(self.MODEL_DIRECTORY , "Images")):
+                    os.makedirs(os.path.join(self.MODEL_DIRECTORY , "Images"))
+                    print("\nCreating model directory storage directory...")
+                    
+                print('\nSaving',self.SAMPLE_NUMBER,'samples from',current_epoch,'epoch')
+                filename = os.path.join(self.MODEL_DIRECTORY, 'Images', 'Epoch_%03d.npy' %current_epoch )
+                checkpoint_samples = self.GENERATOR.predict(constant_noise)
+                if len(checkpoint_samples.shape) == 4:
+                    checkpoint_samples = np.squeeze(checkpoint_samples, axis = -1)
+                # create 'fake' class labels (0)
+                if len(checkpoint_samples) < self.SAMPLE_NUMBER:
+                    for i in range(self.SAMPLE_NUMBER // len(checkpoint_samples) +1):
+                        value = math.log(i+1.6)
+                        temp = self.GENERATOR.predict(constant_noise*value)
+                        if len(temp.shape) == 4:
+                            temp = np.squeeze(temp, axis = -1)
+                        checkpoint_samples = np.vstack((checkpoint_samples , temp ))
+                        
+                checkpoint_samples = (checkpoint_samples[0:self.SAMPLE_NUMBER]+1)/2  
+                checkpoint_samples = np.array(checkpoint_samples*255 , dtype = np.uint8)
+                np.save(filename, checkpoint_samples)   
+                   
+            """
+            #2
+            #Saving model
+            if val_acc> max_vall_acc:
+                if val_acc-max_vall_acc>=delta:
+                    save_model
+                else:
+                    counter+=1
+            if counter==patience:
+                stop_training
+            """
+            #3
+            #Saving history
+            if self.csv_append:
+                model_history = pd.read_csv(self.MODEL_HISTORY_DIRECTORY)
+                
+                next_index = len(model_history)  
+                model_history.loc[next_index, 'epoch'] = current_epoch
+                
+                model_history.to_csv(self.MODEL_HISTORY_DIRECTORY, index = False)
+            else:
+                c = ["epoch"]
+                model_history = pd.DataFrame(columns = c)
+                
+                next_index = len(model_history)  
+                model_history.loc[next_index, 'epoch'] = int(current_epoch)
+                model_history.to_csv(self.MODEL_HISTORY_DIRECTORY, index = False)
+                
+                self.csv_append = True
+                
+            self.MODEL.save(self.MODEL_WEIGHTS_DIRECTORY)   
+                
+                
             ########################################################
     
-        def Initialize_weights_and_training_gan(self, precompiled_model=None):
+        def Initialize_weights_and_training_gan(self, precompiled_model=None, precompiled_generator = None, precompiled_discriminator = None):
             #5
             ########################################################
-            if precompiled_model:
+            if precompiled_model and precompiled_generator and precompiled_discriminator:
                 # Use the provided precompiled model
                 self.MODEL = precompiled_model
+                self.GENERATOR = precompiled_generator
+                self.DISCRIMINATOR = precompiled_discriminator
             else:
                 # Use the initialized model from Initialize_model function
                 assert hasattr(self, 'MODEL'), "Model not initialized. Call Initialize_model_from_library first or use custom compiled model, f.e, from keras or your own."
             
-            self.MODEL = Utils.Initialize_weights_and_training_gan(dataset = self.X_TRAIN,
-                                                                   gan_model = self.MODEL,
-                                                                   gan_generator = self.GENERATOR,
-                                                                   gan_discriminator = self.DISCRIMINATOR,
-                                                                   train = self.TRAIN,
-                                                                   generator_architecture = self.GENERATOR_ARCHITECTURE,
-                                                                   discriminator_architecture = self.DISCRIMINATOR_ARCHITECTURE,
-                                                                   model_directory = self.MODEL_DIRECTORY,
-                                                                   epochs = self.EPOCHS,
-                                                                   batch_size = self.BATCH_SIZE,
-                                                                   latent_dim = self.LATENT_DIM,
-                                                                   sample_interval = self.SAMPLE_INTERVAL,
-                                                                   device = self.DEVICE
-                                                                   )
+
+            #Check if directory of trained model is present, if not, create one 
+            if not os.path.isdir(self.MODEL_DIRECTORY):
+                os.makedirs(self.MODEL_DIRECTORY)
+                print("Creating model directory storage directory...\n")
+
+            
+            self.MODEL , train , starting_epoch = ml.General.Load_model_check_training_progress(model = self.MODEL,
+                                                                                                train = self.TRAIN,
+                                                                                                epochs_to_train = self.EPOCHS,
+                                                                                                model_weights_directory = self.MODEL_WEIGHTS_DIRECTORY,
+                                                                                                model_history_directory = self.MODEL_HISTORY_DIRECTORY
+                                                                                                )
+            try:
+                starting_epoch = int(starting_epoch)
+            except:
+                pass
+                #No starting epoch, or its NONE
+                 
+            if train:
+                #Create callback function to save best performing model
+                
+                if starting_epoch == 0:
+                    self.csv_append = False
+                else:
+                    self.csv_append = True
+                
+                self.CONSTANT_NOISE = np.random.normal(0, 1, (self.SAMPLE_NUMBER, self.LATENT_DIM))
+                
+                #Deleting images if training from scratch
+                if os.path.isdir(os.path.join(self.MODEL_DIRECTORY , "Images")) and not self.csv_append:
+                    print("Deleting remaining images from folder 'Images'... ")
+                    ml.General.delete_files_in_folder(os.path.join(self.MODEL_DIRECTORY , "Images"))
+                
+                timer_start = timer()
+                #To add stable noise over continued training, now its only during one session
+                with tf.device(self.DEVICE):
+                    for epoch in range(starting_epoch+1 , self.EPOCHS+1):
+                        print("\nEpoch:",epoch)
+                        steps_per_epoch = len(self.X_TRAIN) // self.BATCH_SIZE
+                        for step in tqdm(range(steps_per_epoch)):
+                            with redirect_stdout(open(os.devnull, 'w')):
+                                #1
+                                #Taking batch of real samples from dataset
+                                x_real, y_real = ml.General.generate_real_samples(self.X_TRAIN, self.BATCH_SIZE//2)
+                                
+                                #2
+                                #Generating batch of fake samples from generator
+                                x_fake , y_fake = ml.General.generate_fake_samples(self.GENERATOR, self.LATENT_DIM, self.BATCH_SIZE//2)
+                                
+                                #3
+                                #Preparing combined real-fake set for discriminator to train
+                                x = np.vstack((x_real,x_fake))
+                                y = np.vstack((y_real, y_fake))
+                                
+                                #4
+                                #Training discriminator
+                                discriminator_loss = self.DISCRIMINATOR.train_on_batch(x,y)
+                                
+                                #5
+                                #Update generator via discriminator error
+                                noise = np.random.normal(0, 1, (self.BATCH_SIZE, self.LATENT_DIM))
+                                ones = np.ones((self.BATCH_SIZE, 1))
+                                generator_loss = self.MODEL.train_on_batch(noise, ones)
+                                
+                                
+                        # Print the progress
+                        sys.stdout.write(f"[D loss: {discriminator_loss[0]:.3f} | D acc: {discriminator_loss[1]:.3f}] [G loss: {generator_loss:.3f}]")    
+                       
+                        # Save generated images every sample_interval
+                        #gan_callback()
+                        self.Callback(current_epoch = epoch,
+                                      constant_noise = self.CONSTANT_NOISE
+                                      )
+                            
+                        #To make in callbacks some kind of stable random noise to have nice animation of training
+                    
+                    
+                    print("Time took to train model: ",round(timer()-timer_start),2)    
+                    
+                
+                #Save the best achieved model
+                print("Loading model which was performing best during training...\n")
+                self.MODEL.load_weights(self.MODEL_WEIGHTS_DIRECTORY)   
+
+
+
                                 
 
-        def Initialize_resulits(self):
-            #6
-            ########################################################
-            Utils.Initialize_Results(self.MODEL,
-                                  self.MODEL_DIRECTORY,
-                                  self.DICTIONARY,
-                                  self.EVALUATE,
-                                  self.X_TRAIN,
-                                  self.Y_TRAIN,
-                                  self.X_VAL,
-                                  self.Y_VAL,
-                                  self.X_TEST,
-                                  self.Y_TEST
-                                  )
-            ######################################################## 
-            
-        def Generate_sample_submission(self, filepath = None):
-            if filepath is None:
-                sample_submission = pd.read_csv(os.path.join(self.DATA_DIRECTORY , "sample_submission.csv")) 
-    
-            #img_id = sample_submission.columns[0]
-            label = sample_submission.columns[1]
+        def Initialize_history(self,plot_size = 3):
+            if plot_size**2>self.SAMPLE_NUMBER:
+                print("Not enough samples, consider reducing plot size")
+                return
+            #1
+            #Loading most actual model to initialize results
             try:
-                label_array = np.argmax(self.MODEL.predict(self.X_TEST), axis = 1)
+                print("Trying to load most actual model...")
+                self.MODEL.load_weights(self.MODEL_WEIGHTS_DIRECTORY)  
             except:
-                label_array = self.Y_TEST
-            sample_submission[label] = label_array
-            return sample_submission
+                print("Could not load most actual model, working with current one loaded")
+            
+            #2
+            #Creating 
+            history_array = []
+            path = os.path.join(self.MODEL_DIRECTORY , "Images")
+            img_list = os.listdir(path)
+            
+            for filename in img_list:
+                sample = np.load(os.path.join(path,filename))
+                history_array.append(sample)
+                
+            history_array = np.array(history_array)
+            
+            if len(history_array) == 0:
+                print("There is no data, try to train model a little first")
+            
+            plt.subplots_adjust(bottom=0.25)
+            
+            def update_plot(val):
+                epoch = int(val)
+                plt.suptitle(f"Epoch {epoch}")
+                for i in range(plot_size**2):
+                    plt.axis("off")
+                    plt.subplot(plot_size,plot_size,i+1)
+                    if epoch < len(history_array):
+                        if self.GRAYSCALE:
+                            plt.imshow(history_array[epoch][i], cmap="gray")
+                        else:
+                            plt.imshow(history_array[epoch][i])
+                    else:
+                        plt.text(0,0,"No data")  # Display blank image if epoch exceeds available data
+                plt.draw()
+                    
+            ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+            slider = Slider(ax_slider, 'Epoch', 0, len(history_array)-1, valinit=0, valstep=1)
+            
+            # Update the plot when the slider value changes
+            slider.on_changed(update_plot)
+            
+            # Initialize the first plot
+            update_plot(0)
+            
+            plt.show()
+                
+            
+            return history_array , slider
+            
+        
+        def Initialize_results(self,plot_size = 4):
+            #1
+            #Loading most actual model to initialize results
+            try:
+                print("Trying to load most actual model...")
+                self.MODEL.load_weights(self.MODEL_WEIGHTS_DIRECTORY)  
+            except:
+                print("Could not load most actual model, working with current one loaded")
+            
+            Gen_imgs , _ = ml.General.generate_fake_samples(gan_generator = self.GENERATOR,
+                                                    latent_dim = self.LATENT_DIM,
+                                                    n_samples = plot_size**2
+                                                    )
+            Gen_imgs = (Gen_imgs+1)/2
+            
+            plt.figure()
+            plt.suptitle("Results of generator")
+            for i in range(plot_size**2):
+                plt.subplot(plot_size,plot_size,i+1)
+                plt.axis("off")
+                if self.GRAYSCALE:
+                    plt.imshow(Gen_imgs[i] , cmap = 'gray')
+                else:
+                    plt.imshow(Gen_imgs[i])
+                    
+            
+        def Initialize_results_interpolation(self,n_variations = 10, steps_to_variation = 50):
+            gen_img_list = []
+            n_vectors = n_variations
+            steps = steps_to_variation
+            #Interpolated latent vectors for smooth transition effect
+            latent_vectors = [np.random.randn(self.LATENT_DIM) for _ in range(n_vectors)]
+            interpolated_latent_vectors = []
+            for i in range(len(latent_vectors)-1):
+                for alpha in np.linspace(0, 1, steps, endpoint=False):
+                    interpolated_vector = latent_vectors[i] * (1 - alpha) + latent_vectors[i + 1] * alpha
+                    interpolated_latent_vectors.append(interpolated_vector)
+            # Add the last vector to complete the sequence
+
+            for vector in tqdm(interpolated_latent_vectors,desc = "Creating interpolation plot..."):
+                r_vector = np.reshape(vector , (1,len(vector)))
+                
+                gen_img = self.GENERATOR.predict(r_vector , verbose = 0)
+                if len(gen_img.shape) >= 4 and not self.GRAYSCALE:
+                    gen_img = np.reshape(gen_img,(self.IMG_H,self.IMG_W,3))
+                    
+                if len(gen_img.shape) >= 3 and self.GRAYSCALE:
+                    gen_img = np.reshape(gen_img,(self.IMG_H,self.IMG_W))
+                
+                gen_img = (gen_img+1)/2
+                gen_img_list.append(gen_img)
+                ##########
+
+
+                
+                
+            gen_img_list = np.array(gen_img_list)
+            
+            #Plot
+            
+            def update_interpol(i):
+                ax.clear()  # Clear the previous image
+                if self.GRAYSCALE:
+                    ax.imshow(gen_img_list[i], cmap="gray")
+                else:
+                    ax.imshow(gen_img_list[i])
+                    
+                # Optionally, update the title
+                ax.axis("off")
+                plt.draw()
+            
+            # Create the figure and the axis
+            fig, ax = plt.subplots()
+            plt.subplots_adjust(left=0.25, bottom=0.25)
+            
+            # Create the slider
+            ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+            inter_slider = Slider(ax_slider, 'Interpolation', 0, len(gen_img_list) - 1, valinit=0, valstep=1)
+            
+            # Update the plot when the slider value changes
+            inter_slider.on_changed(update_interpol)
+            
+            # Initialize the first plot
+            update_interpol(0)
+            
+            plt.show()
+            
+            return gen_img_list , inter_slider
+            
+            
+            
+                        
+                    
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+
+            
