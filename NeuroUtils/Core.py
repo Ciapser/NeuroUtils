@@ -772,9 +772,10 @@ class Project:
                 self.CONSTANT_NOISE = np.random.normal(0, 1, (self.SAMPLE_NUMBER, self.LATENT_DIM))
                 
                 #Deleting images if training from scratch
-                if os.path.isdir(os.path.join(self.MODEL_DIRECTORY , "Images")) and not self.csv_append:
-                    print("Deleting remaining images from folder 'Images'... ")
-                    ml.General.delete_files_in_folder(os.path.join(self.MODEL_DIRECTORY , "Images"))
+                if os.path.isdir(os.path.join(self.MODEL_DIRECTORY , "Images")) and starting_epoch ==0:
+                    delete_imgs = True
+                else:
+                    delete_imgs = False
                 
                 timer_start = timer()
                 #To add stable noise over continued training, now its only during one session
@@ -810,7 +811,14 @@ class Project:
                                 
                         # Print the progress
                         sys.stdout.write(f"\n[D loss: {discriminator_loss[0]:.3f} | D acc: {discriminator_loss[1]:.3f}] [G loss: {generator_loss:.3f}]")    
-                       
+                        
+                        #Delete images if first iteration
+                        if delete_imgs:
+                            print("Deleting remaining images from folder 'Images'... ")
+                            ml.General.delete_files_in_folder(os.path.join(self.MODEL_DIRECTORY , "Images"))
+                            delete_imgs = False
+                            
+                        
                         # Save generated images every sample_interval
                         #gan_callback()
                         self.Callback(current_epoch = epoch,
