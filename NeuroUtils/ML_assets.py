@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn as skl
 import itertools
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+from PIL import Image
 
 
 class DataSets:
@@ -718,5 +718,24 @@ class General:
                 os.remove(file_path)
     
     
+    # Function to create and save a GIF
+    def create_gif(gif_array, gif_filepath, gif_height, gif_width, fps=5):
+        if not isinstance(gif_array, np.ndarray):
+            raise ValueError("Input must be a numpy array")
+        
+        if gif_array.dtype != np.uint8:
+            raise ValueError("Array must be in np.uint8 format; [0-255] range")
     
+        # Convert numpy arrays to PIL Images
+        images = [Image.fromarray(frame) for frame in gif_array]
+        images = [img.resize((gif_width,gif_height), Image.Resampling.NEAREST) for img in images]
+        
+        # Save the images as a GIF
+        images[0].save(
+            gif_filepath, 
+            save_all=True, 
+            append_images=images[1:], 
+            duration=int(1000 / fps), 
+            loop=0
+        )    
     

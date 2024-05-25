@@ -14,8 +14,6 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from contextlib import redirect_stdout
-from ipywidgets import interact, IntSlider
-from IPython.display import display
 from matplotlib.widgets import Slider
 import math
 
@@ -768,8 +766,16 @@ class Project:
                     self.csv_append = False
                 else:
                     self.csv_append = True
-                
-                self.CONSTANT_NOISE = np.random.normal(0, 1, (self.SAMPLE_NUMBER, self.LATENT_DIM))
+                try:
+                    print("Loading Constant noise...")
+                    self.CONSTANT_NOISE = np.load(os.path.join(self.MODEL_DIRECTORY , "Constant_noise.npy"))
+                    
+                except:
+                    print("Failed to load constant noise, generating one...")
+                    constant_noise = np.random.normal(0, 1, (self.SAMPLE_NUMBER, self.LATENT_DIM))
+                    np.save(os.path.join(self.MODEL_DIRECTORY, "Constant_noise.npy") , constant_noise)
+                    self.CONSTANT_NOISE = constant_noise
+                    
                 
                 #Deleting images if training from scratch
                 if os.path.isdir(os.path.join(self.MODEL_DIRECTORY , "Images")) and starting_epoch ==0:
@@ -898,7 +904,7 @@ class Project:
             return history_array , slider
             
         
-        def Initialize_results(self,plot_size = 4):
+        def Initialize_results(self,plot_size = 4, saveplot = False):
             #1
             #Loading most actual model to initialize results
             try:
@@ -922,9 +928,12 @@ class Project:
                     plt.imshow(Gen_imgs[i] , cmap = 'gray')
                 else:
                     plt.imshow(Gen_imgs[i])
+            if saveplot:
+                plt.savefig('Generator_results.png', bbox_inches='tight')
+            return Gen_imgs
                     
             
-        def Initialize_results_interpolation(self,n_variations = 10, steps_to_variation = 50):
+        def Initialize_results_interpolation(self,n_variations, steps_to_variation, save_gif = False, gif_scale = 1,gif_fps = 20):
             gen_img_list = []
             n_vectors = n_variations
             steps = steps_to_variation
@@ -955,7 +964,18 @@ class Project:
                 
                 
             gen_img_list = np.array(gen_img_list)
-            
+            if save_gif:
+                try:
+                    ml.General.create_gif(gif_array = (gen_img_list*255).astype(np.uint8),
+                                          gif_filepath = os.path.join(self.MODEL_DIRECTORY , "Model_interpolation.gif"),
+                                          gif_height = gen_img_list.shape[1]*gif_scale ,
+                                          gif_width = gen_img_list.shape[2]*gif_scale,
+                                          fps = gif_fps
+                                          )
+                    print("Interpolation gif created!")
+                    
+                except:
+                    print("Could not create gif file")
             #Plot
             
             def update_interpol(i):
