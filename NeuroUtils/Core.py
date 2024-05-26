@@ -16,6 +16,7 @@ from tqdm import tqdm
 from contextlib import redirect_stdout
 from matplotlib.widgets import Slider
 import math
+import cv2
 
 class Utils:
     
@@ -845,7 +846,7 @@ class Project:
 
                                 
 
-        def Initialize_history(self,plot_size = 3):
+        def Initialize_history(self,show_plot, plot_size , create_gif = False, gif_scale = 1, gif_fps = 20):
             if plot_size**2>self.SAMPLE_NUMBER:
                 print("Not enough samples, consider reducing plot size")
                 return
@@ -871,40 +872,56 @@ class Project:
             
             if len(history_array) == 0:
                 print("There is no data, try to train model a little first")
+                return
             
-            plt.subplots_adjust(bottom=0.25)
+            if create_gif:
+                grid_array = ml.General.create_image_grid(history_array , size = plot_size)
+                ml.General.create_gif(gif_array = grid_array,
+                                      gif_filepath = os.path.join(self.MODEL_DIRECTORY , "Training_history.gif"),
+                                      gif_height = int(grid_array.shape[1]*gif_scale),
+                                      gif_width = int(grid_array.shape[2]*gif_scale),
+                                      fps = gif_fps
+                                      )
             
-            def update_plot(val):
-                epoch = int(val)
-                plt.suptitle(f"Epoch {epoch}")
-                for i in range(plot_size**2):
-                    plt.axis("off")
-                    plt.subplot(plot_size,plot_size,i+1)
-                    if epoch < len(history_array):
-                        if self.GRAYSCALE:
-                            plt.imshow(history_array[epoch][i], cmap="gray")
-                        else:
-                            plt.imshow(history_array[epoch][i])
-                    else:
-                        plt.text(0,0,"No data")  # Display blank image if epoch exceeds available data
-                plt.draw()
+            
+            
+            def update_plot(epoch):
+                ax.clear()  # Clear the previous image
+                plt.title("Training history\nEpoch: "+str(epoch))
+                if self.GRAYSCALE:
+                    ax.imshow(grid_array[epoch], cmap="gray")
+                else:
+                    ax.imshow(grid_array[epoch])
                     
-            ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')
-            slider = Slider(ax_slider, 'Epoch', 0, len(history_array)-1, valinit=0, valstep=1)
+                # Optionally, update the title
+                ax.axis("off")
+                plt.draw()
+  
+            if show_plot:  
+                #plt.subplots_adjust(bottom=0.25)
+                # Create the figure and the axis
+                fig, ax = plt.subplots()
+                plt.subplots_adjust(left=0.25, bottom=0.25)
+                
+                ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+                slider = Slider(ax_slider, 'Epoch', 0, len(history_array)-1, valinit=0, valstep=1)
+                
+                # Update the plot when the slider value changes
+                slider.on_changed(update_plot)
+                
+                # Initialize the first plot
             
-            # Update the plot when the slider value changes
-            slider.on_changed(update_plot)
-            
-            # Initialize the first plot
-            update_plot(0)
-            
-            plt.show()
+                update_plot(0)
+                
+                plt.show()
+            else:
+                slider = None
                 
             
             return history_array , slider
             
         
-        def Initialize_results(self,plot_size = 4, saveplot = False):
+        def Initialize_results(self,show_plot, plot_size = 4, saveplot = False, plot_scale = 1):
             #1
             #Loading most actual model to initialize results
             try:
@@ -918,27 +935,37 @@ class Project:
                                                     n_samples = plot_size**2
                                                     )
             Gen_imgs = (Gen_imgs+1)/2
+            Gen_imgs = np.array(Gen_imgs*255 , dtype = np.uint8)
             
-            plt.figure()
-            plt.suptitle("Results of generator")
-            for i in range(plot_size**2):
-                plt.subplot(plot_size,plot_size,i+1)
+            Grid_img = ml.General.create_image_grid(Gen_imgs, plot_size)
+
+        
+        
+            if show_plot:
+                plt.figure()
                 plt.axis("off")
+                plt.title("Model Interpolation")
                 if self.GRAYSCALE:
-                    plt.imshow(Gen_imgs[i] , cmap = 'gray')
+                    plt.imshow(Grid_img , cmap = 'gray')
                 else:
-                    plt.imshow(Gen_imgs[i])
+                    plt.imshow(Grid_img)
             if saveplot:
-                plt.savefig('Generator_results.png', bbox_inches='tight')
+                save_dir = os.path.join(self.MODEL_DIRECTORY , 'Generator_results.png')
+                Resized_grid_img = cv2.resize(Grid_img, (int(Grid_img.shape[0]*plot_scale), int(Grid_img.shape[1]*plot_scale)), interpolation=cv2.INTER_NEAREST)
+                cv2.imwrite(save_dir,Resized_grid_img)
+                
             return Gen_imgs
+                
+
                     
             
-        def Initialize_results_interpolation(self,n_variations, steps_to_variation, save_gif = False, gif_scale = 1,gif_fps = 20):
+        def Initialize_results_interpolation(self,n_variations, steps_to_variation, create_gif = False, gif_scale = 1,gif_fps = 20):
             gen_img_list = []
             n_vectors = n_variations
             steps = steps_to_variation
             #Interpolated latent vectors for smooth transition effect
-            latent_vectors = [np.random.randn(self.LATENT_DIM) for _ in range(n_vectors)]
+            latent_vectors = [np.random.randn(self.LATENT_DIM) for _ in range(n_vectors-1)]
+            latent_vectors.append(latent_vectors[0])
             interpolated_latent_vectors = []
             for i in range(len(latent_vectors)-1):
                 for alpha in np.linspace(0, 1, steps, endpoint=False):
@@ -964,12 +991,12 @@ class Project:
                 
                 
             gen_img_list = np.array(gen_img_list)
-            if save_gif:
+            if create_gif:
                 try:
                     ml.General.create_gif(gif_array = (gen_img_list*255).astype(np.uint8),
                                           gif_filepath = os.path.join(self.MODEL_DIRECTORY , "Model_interpolation.gif"),
-                                          gif_height = gen_img_list.shape[1]*gif_scale ,
-                                          gif_width = gen_img_list.shape[2]*gif_scale,
+                                          gif_height = int(gen_img_list.shape[1]*gif_scale) ,
+                                          gif_width = int(gen_img_list.shape[2]*gif_scale),
                                           fps = gif_fps
                                           )
                     print("Interpolation gif created!")

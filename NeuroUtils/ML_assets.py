@@ -738,4 +738,73 @@ class General:
             duration=int(1000 / fps), 
             loop=0
         )    
+
+
+    def create_image_grid(img_array, size):
+        #To improve so it can handle rgb images as well, also describe required array configuration to work
+        if len(img_array.shape) == 3:
+            single_iteration = True
+        else:
+            single_iteration = False
+        try:
+            if single_iteration:
+                img_array = img_array[0:size**2,:,:]
+            else:
+                img_array = img_array[:,0:size**2,:,:]
+        except:
+            print("Size is too big for given array, increase number of samples or decrease size of grid")
+            return
+            
+        # Calculate grid size (e.g., 5x5 for 25 images)
+        if single_iteration:
+            iterations = 1
+            num_images = img_array.shape[0]
+            cell_height = img_array.shape[1]
+            cell_width = img_array.shape[2]
+
+        else:
+            iterations = img_array.shape[0]
+            num_images = img_array.shape[1]
+            cell_height = img_array.shape[2]
+            cell_width = img_array.shape[3]
+            
+        grid_size = int(np.ceil(np.sqrt(num_images)))
+        
+        # Determine the size of each cell in the grid
+    
+        grid_array = []
+        # Create an empty grid image
+        for i in range(iterations):
+            grid_img = np.zeros((grid_size * cell_height, grid_size * cell_width), dtype=np.uint8)
+            
+            for idx in range(num_images):
+                row = idx // grid_size
+                col = idx % grid_size
+                if single_iteration:
+                    grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[idx]
+                else:
+                    grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[i][idx]
+        
+            grid_array.append(grid_img)   
+        grid_array = np.array(grid_array)
+        
+        if single_iteration:
+            grid_array = grid_array[0]
+            
+        return grid_array    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
