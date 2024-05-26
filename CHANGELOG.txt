@@ -1,4 +1,11 @@
 =====================================================================================
+Version 0.1.7
+Gif update
+
+Added Stable gif and grid creation. Especially useful in gan projects with a lot of changing images
+Grayscale grids can be created from few 3D - single grid, or 4D array- multiple grids
+For RGB grids it is 4D for single grid and 5D for multiple grid creation.
+=====================================================================================
 Version 0.1.6
 Gan Project module addon
 

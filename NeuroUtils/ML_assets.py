@@ -740,17 +740,32 @@ class General:
         )    
 
 
-    def create_image_grid(img_array, size):
+    def create_image_grid(img_array, size, RGB = False):
         #To improve so it can handle rgb images as well, also describe required array configuration to work
-        if len(img_array.shape) == 3:
+        
+        if len(img_array.shape) == 3 and not RGB:
             single_iteration = True
+            
+        elif len(img_array.shape) == 4 and RGB:
+            single_iteration = True
+
         else:
             single_iteration = False
+            
+              
         try:
-            if single_iteration:
-                img_array = img_array[0:size**2,:,:]
+            if RGB:
+                if single_iteration:
+                    img_array = img_array[0:size**2,:,:,:]
+                else:
+                    img_array = img_array[:,0:size**2,:,:,:]
+                
             else:
-                img_array = img_array[:,0:size**2,:,:]
+                if single_iteration:
+                    img_array = img_array[0:size**2,:,:]
+                else:
+                    img_array = img_array[:,0:size**2,:,:]
+                
         except:
             print("Size is too big for given array, increase number of samples or decrease size of grid")
             return
@@ -771,20 +786,29 @@ class General:
         grid_size = int(np.ceil(np.sqrt(num_images)))
         
         # Determine the size of each cell in the grid
-    
         grid_array = []
         # Create an empty grid image
         for i in range(iterations):
-            grid_img = np.zeros((grid_size * cell_height, grid_size * cell_width), dtype=np.uint8)
+            if RGB:
+                grid_img = np.zeros((grid_size * cell_height, grid_size * cell_width,3), dtype=np.uint8)
+            else:
+                grid_img = np.zeros((grid_size * cell_height, grid_size * cell_width), dtype=np.uint8)
+                
             
             for idx in range(num_images):
                 row = idx // grid_size
                 col = idx % grid_size
-                if single_iteration:
-                    grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[idx]
+                if RGB:
+                    if single_iteration:
+                        grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width,:] = img_array[idx]
+                    else:
+                        grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width,:] = img_array[i][idx]
                 else:
-                    grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[i][idx]
-        
+                    if single_iteration:
+                        grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[idx]
+                    else:
+                        grid_img[row * cell_height: (row + 1) * cell_height, col * cell_width: (col + 1) * cell_width] = img_array[i][idx]
+            
             grid_array.append(grid_img)   
         grid_array = np.array(grid_array)
         
