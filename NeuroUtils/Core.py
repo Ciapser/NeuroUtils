@@ -944,7 +944,7 @@ class Project:
             if show_plot:
                 plt.figure()
                 plt.axis("off")
-                plt.title("Model Interpolation")
+                plt.title("Model Results")
                 if self.GRAYSCALE:
                     plt.imshow(Grid_img , cmap = 'gray')
                 else:
