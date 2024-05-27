@@ -181,23 +181,8 @@ class Utils:
         #########################################################################
         return model
     
-    def Initialize_Gan_model(generator_arch, discriminator_arch, latent_dim, show_architecture):    
-        g_arch = f"{generator_arch}"
-        d_arch = f"{discriminator_arch}"
-        generator_class = getattr(arch.Gan, g_arch, None)
-        discriminator_class = getattr(arch.Gan, d_arch, None)
-        
-        if (generator_class and discriminator_class) is not None:
-            gan_generator = generator_class(latent_dim)
-            gan_discriminator = discriminator_class()
-            print("Found generator named: ",g_arch,"\nFound discriminator named: ",d_arch)
-        else:
-            if generator_class is None:
-                print("Could not find generator class named: ",g_arch)
-                return
-            if discriminator_class is None:
-                print("Could not find discriminator class named: ",d_arch)
-                return
+    def Initialize_Gan_model(gan_generator, gan_discriminator, show_architecture = False):    
+
                 
         gan_discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5), metrics=['accuracy'])
 
@@ -211,7 +196,10 @@ class Utils:
         gan_model.add(gan_discriminator)
         gan_model.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5))
         
-        return gan_model, gan_generator, gan_discriminator
+        if show_architecture:
+            gan_model.summary()
+        
+        return gan_model
             
 
         
@@ -660,11 +648,28 @@ class Project:
         
             
         def Initialize_model_from_library(self):
-            self.MODEL,self.GENERATOR,self.DISCRIMINATOR = Utils.Initialize_Gan_model(generator_arch = self.GENERATOR_ARCHITECTURE,
-                                                                                      discriminator_arch = self.DISCRIMINATOR_ARCHITECTURE,
-                                                                                      latent_dim = self.LATENT_DIM,
-                                                                                      show_architecture = self.SHOW_ARCHITECTURE
-                                                                                      )
+            
+            g_arch = f"{self.GENERATOR_ARCHITECTURE}"
+            d_arch = f"{self.DISCRIMINATOR_ARCHITECTURE}"
+            generator_class = getattr(arch.Gan, g_arch, None)
+            discriminator_class = getattr(arch.Gan, d_arch, None)
+            
+            if (generator_class and discriminator_class) is not None:
+                self.GENERATOR = generator_class(self.LATENT_DIM)
+                self.DISCRIMINATOR = discriminator_class()
+                print("Found generator named: ",g_arch,"\nFound discriminator named: ",d_arch)
+            else:
+                if generator_class is None:
+                    print("Could not find generator class named: ",g_arch)
+                    return
+                if discriminator_class is None:
+                    print("Could not find discriminator class named: ",d_arch)
+                    return
+                
+            self.MODEL = Utils.Initialize_Gan_model(gan_generator = self.GENERATOR,
+                                                    gan_discriminator = self.DISCRIMINATOR,
+                                                    show_architecture = self.SHOW_ARCHITECTURE
+                                                    )
             
             
  
