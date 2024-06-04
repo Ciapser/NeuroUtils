@@ -701,7 +701,7 @@ class General:
         noise = np.random.normal(0, 1, (n_samples, latent_dim))
         # predict outputs
         x = gan_generator.predict(noise)
-        if len(x.shape) == 4:
+        if len(x.shape) == 4 and x.shape[3]==1:
             x = np.squeeze(x, axis = -1)
         # create 'fake' class labels (0)
         y = np.zeros((n_samples, 1))

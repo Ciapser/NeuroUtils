@@ -684,14 +684,14 @@ class Project:
                 print('\nSaving',self.SAMPLE_NUMBER,'samples from',current_epoch,'epoch')
                 filename = os.path.join(self.MODEL_DIRECTORY, 'Images', 'Epoch_%03d.npy' %current_epoch )
                 checkpoint_samples = self.GENERATOR.predict(constant_noise)
-                if len(checkpoint_samples.shape) == 4:
+                if len(checkpoint_samples.shape) == 4 and checkpoint_samples.shape[3]==1:
                     checkpoint_samples = np.squeeze(checkpoint_samples, axis = -1)
                 # create 'fake' class labels (0)
                 if len(checkpoint_samples) < self.SAMPLE_NUMBER:
                     for i in range(self.SAMPLE_NUMBER // len(checkpoint_samples) +1):
                         value = math.log(i+1.6)
                         temp = self.GENERATOR.predict(constant_noise*value)
-                        if len(temp.shape) == 4:
+                        if len(temp.shape) == 4 and temp.shape[3]==1:
                             temp = np.squeeze(temp, axis = -1)
                         checkpoint_samples = np.vstack((checkpoint_samples , temp ))
                         
