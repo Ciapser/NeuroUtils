@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import sklearn as skl
 import itertools
 from PIL import Image
+from matplotlib.widgets import Slider
 
 
 class DataSets:
@@ -818,7 +819,88 @@ class General:
         return grid_array    
     
     
-    
+    def Image_interpolation(generator, n_variations, steps_to_variation, is_grayscale = False, create_gif = False, gif_path = "Interpolated_Gif.gif", gif_scale = 1, gif_fps = 20):
+        gen_img_list = []
+        n_vectors = n_variations
+        steps = steps_to_variation
+        
+        latent_dim = int(generator.input.shape[1])
+        img_H = generator.output.shape[1]
+        img_W = generator.output.shape[2]
+        
+        #Interpolated latent vectors for smooth transition effect
+        latent_vectors = [np.random.randn(latent_dim) for _ in range(n_vectors-1)]
+        latent_vectors.append(latent_vectors[0])
+        interpolated_latent_vectors = []
+        for i in range(len(latent_vectors)-1):
+            for alpha in np.linspace(0, 1, steps, endpoint=False):
+                interpolated_vector = latent_vectors[i] * (1 - alpha) + latent_vectors[i + 1] * alpha
+                interpolated_latent_vectors.append(interpolated_vector)
+        # Add the last vector to complete the sequence
+        
+        for vector in tqdm(interpolated_latent_vectors,desc = "Creating interpolation plot..."):
+            r_vector = np.reshape(vector , (1,len(vector)))
+            
+            gen_img = generator.predict(r_vector , verbose = 0)
+
+
+            if len(gen_img.shape) >= 4 and not is_grayscale:
+                gen_img = np.reshape(gen_img,(img_H,img_W,3))
+                
+            if len(gen_img.shape) >= 3 and is_grayscale:
+                gen_img = np.reshape(gen_img,(img_H,img_W))
+
+            gen_img = (gen_img - gen_img.min()) / (gen_img.max() - gen_img.min())
+            gen_img_list.append(gen_img)
+            ##########
+        
+        
+            
+            
+        gen_img_list = np.array(gen_img_list)
+        #return gen_img_list
+        if create_gif:
+            try:
+                General.create_gif(gif_array = (gen_img_list*255).astype(np.uint8),
+                                      gif_filepath = gif_path,
+                                      gif_height = int(gen_img_list.shape[1]*gif_scale) ,
+                                      gif_width = int(gen_img_list.shape[2]*gif_scale),
+                                      fps = gif_fps
+                                      )
+                print("Interpolation gif created!")
+                
+            except:
+                print("Could not create gif file")
+        #Plot
+        
+        def update_interpol(i):
+            ax.clear()  # Clear the previous image
+            if is_grayscale:
+                ax.imshow(gen_img_list[i], cmap="gray")
+            else:
+                ax.imshow(gen_img_list[i])
+                
+            # Optionally, update the title
+            ax.axis("off")
+            plt.draw()
+        
+        # Create the figure and the axis
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(left=0.25, bottom=0.25)
+        
+        # Create the slider
+        ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+        inter_slider = Slider(ax_slider, 'Interpolation', 0, len(gen_img_list) - 1, valinit=0, valstep=1)
+        
+        # Update the plot when the slider value changes
+        inter_slider.on_changed(update_interpol)
+        
+        # Initialize the first plot
+        update_interpol(0)
+        
+        plt.show()
+        
+        return gen_img_list , inter_slider    
     
     
     
