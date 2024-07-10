@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "NeuroUtils"
-version = "0.1.7"
+version = "0.1.8"
 description = "Library for neural network projects organisation"
 authors = [{name = "Sebastian Borukało", email = "Ciapserr@gmail.com"}]
 readme = "README.txt"
