@@ -566,7 +566,9 @@ class General:
             try:
                 print("Loading trained weights to model and its training history...")
                 Model_history = pd.read_csv(model_history_directory)
-                model.load_weights(model_weights_directory)
+                
+                model = tf.keras.models.load_model(model_weights_directory)
+                #model.load_weights(model_weights_directory)
                 
                       
             except:

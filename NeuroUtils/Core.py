@@ -18,11 +18,12 @@ from matplotlib.widgets import Slider
 import math
 import cv2
 import json
+from sklearn.metrics import confusion_matrix
 
 
 class Utils:
     
-    
+
     def Initialize_data(DataBase_directory, Data_directory, img_H, img_W, grayscale, Load_from_CSV):
         """
         Initializes -> Loading data from main DataBase folder and load it by classes in 
@@ -498,11 +499,11 @@ class Project:
             img_H = self.IMG_H
             img_W = self.IMG_W
             grayscale = self.GRAYSCALE
-            Image_datatype = self.DATA_TYPE
+            Image_datatype = str(self.DATA_TYPE)
             Augmentation_mark = self.PARAM_MARK
             
             user_architecture_name = self.ARCHITECTURE_NAME
-            Model_datatype = "float32"
+            Model_datatype = str("float32")
             total_params = Model.count_params()
             trainable_params, not_trainable_params = ml.General.Count_parameters(Model)
             num_layers = len(Model.layers)
@@ -514,42 +515,39 @@ class Project:
 
             
             # Create the content for the text file
-            content = (
-                f"Number of Classes: {n_classes}\n"
-                f"Class Size: {class_size}\n"
-                f"\n"
-                f"Image Height: {img_H}\n"
-                f"Image Width: {img_W}\n"
-                f"Grayscale: {grayscale}\n"
-                f"Image Datatype: {Image_datatype}\n"
-                f"Augmentation Mark: {Augmentation_mark}\n"
-                f"\n"
-                f"User Architecture Name: {user_architecture_name}\n"
-                f"Model Datatype: {Model_datatype}\n"
-                f"Total Parameters: {total_params}\n"
-                f"Trainable Parameters: {trainable_params}\n"
-                f"Not-Trainable Parameters: {not_trainable_params}\n"
-                f"Number of Layers: {num_layers}\n"
-                f"\n"
-                f"Batch Size: {batch_size}\n"
-                f"Optimizer Parameters: {optimizer_params}\n"
-                f"Loss function: {loss}\n"
-                f"\n"
-                f"Additional information: {add_config_info}\n"
-                
-            )
+            content = {
+                "Number of Classes": n_classes,
+                "Class Size": class_size,
+                "Image Height": img_H,
+                "Image Width": img_W,
+                "Grayscale": grayscale,
+                "Image Datatype": Image_datatype,
+                "Augmentation Mark": Augmentation_mark,
+                "User Architecture Name": user_architecture_name,
+                "Model Datatype": Model_datatype,
+                "Total Parameters": total_params,
+                "Trainable Parameters": trainable_params,
+                "Not-Trainable Parameters": not_trainable_params,
+                "Number of Layers": num_layers,
+                "Batch Size": batch_size,
+                "Optimizer Parameters": optimizer_params,
+                "Loss function": loss,
+                "Additional information": add_config_info
+            }
             
-            f_name = ml.General.hash_string(content)
+            f_name = ml.General.hash_string(str(content))
             model_directory = os.path.join("Models_saved", str(f_name))
             self.MODEL_DIRECTORY = model_directory
+            
             if not os.path.exists(model_directory):
                 print("Model Created")
                 os.mkdir(model_directory)
             
-            params_directory = os.path.join(model_directory,"Model_parameters.txt")
+            params_directory = os.path.join(model_directory,"Model_parameters.json")
             # Save the content to a text file
-            with open(params_directory, 'w') as file:
-                file.write(content)
+            # Write dictionary to JSON file
+            with open(params_directory, 'w') as json_file:
+                json.dump(content, json_file, indent=4)
 
 
             self.MODEL = Utils.Initialize_weights_and_training(x_train = self.X_TRAIN,
@@ -584,6 +582,178 @@ class Project:
                                   self.Y_TEST
                                   )
             ######################################################## 
+            
+            
+            
+        def Models_analysis(self,models_directory = "Models_saved"):
+            print("Collecting model Data")
+            
+            #Checking for folder names, filtering if something in the folder is not another folder
+            unfiltered_folders = []
+            for item in os.listdir(os.path.join(self.PROJECT_DIRECTORY,models_directory)):
+                item_path = os.path.join(self.PROJECT_DIRECTORY,models_directory, item)
+                if os.path.isdir(item_path):
+                    unfiltered_folders.append(item)
+                    
+            #checks if model folder have necessary files, if not. Put it out of the list
+            folders = []
+            for item in unfiltered_folders:
+                contains_all_files = True
+                files = ["Model.keras", "Model.keras_score.json", "Model_history.csv", "Model_parameters.json"]
+                for file in files:
+                    if not os.path.isfile(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",item,file)):
+                        print("Model: ",item,"do not contain file: ",file,"and wont be considered in the analysis")
+                        contains_all_files = False
+
+                if contains_all_files:
+                    folders.append(item)
+                    
+            Data_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Data.csv")
+            #Create dataframe with analysys if it does not exists yet
+            if not os.path.isfile(Data_path):
+                c = ["Model_ID",
+                     "Model_WorkName",
+                     "Model_Parameters",
+                     "Model_Dtype",
+                     "Batch_size",
+                     "Epochs_trained",
+                     "Epochs_toBest",
+                     
+                     "Optimizer_data",
+                     "Loss_type",
+                     "Metrics_type",
+
+                     "N_classes",
+                     "Img_number",
+                     "Aug_mark",
+                     "Img_Dtype",
+                     "Form",
+                     "Img_H",
+                     "Img_W",
+                      
+                     "Loss_train",
+                     "Loss_val",
+                     "Loss_test",
+                     "Metrics_train",
+                     "Metrics_val",
+                     "Metrics_test",
+                     "Additional_info"
+                     ]
+                Data = pd.DataFrame(columns = c)
+            else:
+                Data = pd.read_csv(Data_path)
+
+            #Determine if this model is already present in the data
+            for model in folders:
+                Model_history = pd.read_csv(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_history.csv"))
+                if Data["Model_ID"].isin([model]).any():
+                    print("Model: ",model,"present in Data")
+                    #To update if epochs has been changed
+                else:
+                    print("Collecting model data...")
+                    
+                    param_path = os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_parameters.json")
+                    with open(param_path, 'r') as json_file:
+                        param_data = json.load(json_file)
+
+                    Model_WorkName = param_data["User Architecture Name"]
+                    Model_Parameters = param_data["Total Parameters"]
+                    Model_Dtype = param_data["Model Datatype"]
+                    Batch_Size = param_data["Batch Size"]
+                    Epochs_Trained = Model_history["epoch"].iloc[-1]
+                    best_val_acc = Model_history["val_accuracy"].idxmax()
+                    Epochs_toBest = (Model_history['val_accuracy'] == Model_history["val_accuracy"][best_val_acc]).idxmax()
+                    
+                    Optimizer_data = param_data["Optimizer Parameters"]
+                    Loss_type = param_data["Loss function"]
+                    Metrics_type = "to add"
+
+                    N_classes = param_data["Number of Classes"]
+                    Class_size = param_data["Class Size"]
+                    Img_number = 0
+                    for item in Class_size:
+                        Img_number+= item[1]
+                        
+                        
+                    Aug_mark = param_data["Augmentation Mark"]
+                    Img_Dtype = param_data["Image Datatype"]
+                    Form = bool(param_data["Grayscale"])
+                    Form = "Grayscale" if Form else "RGB"
+                    Img_H = param_data["Image Height"]
+                    Img_W = param_data["Image Width"]
+                    
+                    processed_data_dir = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(Img_H)+"x"+str(Img_W)+"_"+Form),Aug_mark)
+                    
+                    Keras_model = tf.keras.models.load_model(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model.keras"))
+                    try:
+                        x_train = (np.load(os.path.join(processed_data_dir,"x_train.npy"))/255).astype(Img_Dtype)
+                        y_train = (np.load(os.path.join(processed_data_dir,"y_train.npy"))/255).astype(Img_Dtype)
+                        print("Calculating train loss...")
+                        Loss_train,_ = Keras_model.evaluate(x_train,y_train , verbose = 1)
+                    except:
+                        print("No train set found")
+                        Loss_train = None
+
+                    try:
+                        x_val = (np.load(os.path.join(processed_data_dir,"x_val.npy"))/255).astype(Img_Dtype)
+                        y_val = (np.load(os.path.join(processed_data_dir,"y_val.npy"))/255).astype(Img_Dtype)
+                        print("Calculating validation loss...")
+                        Loss_val,_ = Keras_model.evaluate(x_val,y_val, verbose = 1)
+                    except:
+                        print("No validation set found")
+                        Loss_val = None
+                        
+                    try:
+                        x_test = (np.load(os.path.join(processed_data_dir,"x_test.npy"))/255).astype(Img_Dtype)
+                        y_test = (np.load(os.path.join(processed_data_dir,"y_test.npy"))/255).astype(Img_Dtype)
+                        print("Calculating test loss...")
+                        Loss_test,_ = Keras_model.evaluate(x_test,y_test,verbose = 1)
+                    except:
+                        print("No test set found")
+                        Loss_test = None 
+                          
+                    
+                    Additional_info = param_data["Additional information"]
+
+
+                    Data.loc[model] = [ model,
+                                        Model_WorkName,
+                                        Model_Parameters,
+                                        Model_Dtype,
+                                        Batch_Size,
+                                        Epochs_Trained,
+                                        Epochs_toBest,
+                                     
+                                        Optimizer_data,
+                                        Loss_type,
+                                        Metrics_type,
+            
+                                        N_classes,
+                                        Img_number,
+                                        Aug_mark,
+                                        Img_Dtype,
+                                        Form,
+                                        Img_H,
+                                        Img_W,
+                                      
+                                        Loss_train,
+                                        Loss_val,
+                                        Loss_test,
+                                        "Metrics_train [TP,FP,FN,TN]",
+                                        "Metrics_val [TP,FP,FN,TN]",
+                                        "Metrics_test [TP,FP,FN,TN]",
+                                        Additional_info
+                                      ]
+                    Data.to_csv(Data_path)
+            
+            #At the end of Data creation
+            Data.to_csv(Data_path,index = False)
+
+                
+
+            
+            
+        
             
         def Generate_sample_submission(self, filepath = None):
             if filepath is None:
