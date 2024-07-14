@@ -17,8 +17,11 @@ from contextlib import redirect_stdout
 from matplotlib.widgets import Slider
 import math
 import cv2
+import json
+
 
 class Utils:
+    
     
     def Initialize_data(DataBase_directory, Data_directory, img_H, img_W, grayscale, Load_from_CSV):
         """
@@ -68,7 +71,7 @@ class Utils:
                 print("Dataset is initialized correctly!")
                    
     
-    def Process_Data(x , y ,dataset_multiplier, DataProcessed_directory, Kaggle_set, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):        
+    def Process_Data(x , y ,dataset_multiplier, DataProcessed_directory, Create_test_set, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):        
         #Folder creation if not existing
         if not os.path.isdir(DataProcessed_directory):
             os.makedirs(DataProcessed_directory)
@@ -76,7 +79,7 @@ class Utils:
         #If folder exists trying to load data from it
         else:  
             print("Found processed Dataset,loading...")
-            if not Kaggle_set:
+            if Create_test_set:
                 try:
                     x_train = np.load(os.path.join(DataProcessed_directory ,"x_train.npy"))
                     y_train = np.load(os.path.join(DataProcessed_directory ,"y_train.npy"))
@@ -107,7 +110,7 @@ class Utils:
     
         print("There is no Dataset processed, processing Dataset...")
 
-        if Kaggle_set:
+        if not Create_test_set:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.2 ,stratify = y, shuffle = True)
         else:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.3 ,stratify = y, shuffle = True)
@@ -124,7 +127,7 @@ class Utils:
         
         
         
-        if not Kaggle_set:
+        if Create_test_set:
             np.save(os.path.join(DataProcessed_directory ,"x_train.npy") , x_train)
             np.save(os.path.join(DataProcessed_directory ,"y_train.npy") , y_train)
             
@@ -146,40 +149,6 @@ class Utils:
             return x_train , y_train , x_val , y_val
     
     
-    def Initialize_model(model_architecture, n_classes, img_H, img_W, channels, show_architecture):    
-      
-        #!!! Defining the architecture of the CNN 
-        #and creation of directory based on it and initial parameters
-        #########################################################################
-        #########################################################################
-        
-        #Checking if given architecture name is present in library
-        model_architecture = f"{model_architecture}"
-        
-        model_architecture_class = getattr(arch.Img_Classification, model_architecture, None)
-        
-        if model_architecture_class is not None:
-            # If the class is found, instantiate the model
-            model = model_architecture_class((img_H,img_W,channels) , n_classes)
-            print("Found architecture named: ",model_architecture,)
-        else:
-            # If the class is not found, print a message
-            model = None
-            print("No such model architecture in library")
-        
-        #!!! Building and compiling model
-        #########################################################################
-        #########################################################################
-        #Choosing optimizer
-        optimizer = tf.keras.optimizers.Adam()
-        #Compiling model
-        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
-        if show_architecture:
-            model.summary()
-        
-        #########################################################################
-        #########################################################################
-        return model
     
     def Initialize_Gan_model(gan_generator, gan_discriminator, show_architecture = False):    
 
@@ -202,8 +171,48 @@ class Utils:
         return gan_model
             
 
-        
-    def Initialize_weights_and_training(x_train, y_train, model, model_directory, model_architecture, train, epochs, patience, batch_size,min_delta, x_val=None, y_val=None, device = "CPU:0"):    
+    class SaveBestModel(tf.keras.callbacks.Callback):
+        def __init__(self, filepath, monitor='val_loss', mode='min', min_delta=0):
+            super().__init__()
+            self.filepath = filepath
+            self.monitor = monitor
+            self.mode = mode
+            self.min_delta = min_delta
+            self.best_score = self._load_best_score()
+
+            if self.best_score is None:
+                self.best_score = float('inf') if mode == 'min' else float('-inf')
+
+        def _save_best_score(self, score):
+            with open(self.filepath + "_score.json", "w") as f:
+                json.dump({"best_score": score}, f)
+
+        def _load_best_score(self):
+            if os.path.exists(self.filepath + "_score.json"):
+                with open(self.filepath + "_score.json", "r") as f:
+                    return json.load(f)["best_score"]
+            else:
+                return None
+
+        def on_epoch_end(self, epoch, logs=None):
+            current_score = logs.get(self.monitor)
+
+            if current_score is not None:
+                if self._is_improvement(current_score, self.best_score):
+                    print(f"Epoch {epoch + 1}: Improvement detected in {self.monitor}. Saving model with score: {current_score:.4f}")
+                    self.best_score = current_score
+                    self.model.save(self.filepath)
+                    self._save_best_score(self.best_score)
+
+
+        def _is_improvement(self, current, best):
+            if self.mode == 'min':
+                return current < best - self.min_delta
+            else:
+                return current > best + self.min_delta
+            
+            
+    def Initialize_weights_and_training(x_train, y_train, model, model_directory, train, epochs, patience, batch_size,min_delta, x_val=None, y_val=None, device = "CPU:0"):    
         #!!! Model training
         #########################################################################
         #########################################################################
@@ -212,8 +221,7 @@ class Utils:
             os.makedirs(model_directory)
             print("Creating model directory storage directory...\n")
             
-        model_name = str(model_architecture + "_bs"+str(batch_size)+".keras")
-        model_weights_directory = os.path.join(model_directory , model_name)
+        model_weights_directory = os.path.join(model_directory , "Model.keras")
         model_history_directory = os.path.join(model_directory , "Model_history.csv")
         
         model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, epochs, model_weights_directory, model_history_directory)
@@ -234,14 +242,12 @@ class Utils:
                                                          monitor='val_accuracy',
                                                          min_delta=min_delta),
                         #Checkpoint model if performance is increased
-                        tf.keras.callbacks.ModelCheckpoint(filepath = model_weights_directory  ,
-                                                        monitor = "val_accuracy",
-                                                        save_best_only = True,
-                                                        verbose = 1),
+                        Utils.SaveBestModel(filepath=model_weights_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),
+                        
                         #Save data through training
                         tf.keras.callbacks.CSVLogger(filename = model_history_directory , append = csv_append)
                         ]
-         
+
             with tf.device(device):
                 
                 #Start measuring time
@@ -336,7 +342,7 @@ class Project:
             self.PROJECT_DIRECTORY = os.path.dirname(os.path.abspath(sys.argv[0]))
             #Initial
             self.DATABASE_DIRECTORY = config.Initial_params["DataBase_directory"]
-            self.KAGGLE_SET = config.Initial_params["Kaggle_set"]
+            self.CREATE_TEST_SET = config.Initial_params["Create_Test_set"]
             self.CSV_LOAD = config.Initial_params["Load_from_CSV"]
             self.IMG_H = config.Initial_params["img_H"]
             self.IMG_W = config.Initial_params["img_W"]
@@ -353,15 +359,10 @@ class Project:
             self.CONTOUR = config.Augment_params["contour"]
             
             #Model
-            self.MODEL_ARCHITECTURE = config.Model_parameters["model_architecture"]
-            self.SHOW_ARCHITECTURE = config.Model_parameters["show_architecture"]
-            self.DEVICE = config.Model_parameters["device"]
-            self.TRAIN = config.Model_parameters["train"]
+            self.ARCHITECTURE_NAME = config.Model_parameters["architecture_name"]
             self.EPOCHS = config.Model_parameters["epochs"]
-            self.PATIENCE = config.Model_parameters["patience"]
             self.BATCH_SIZE = config.Model_parameters["batch_size"]
-            self.MIN_DELTA = config.Model_parameters["min_delta"]
-            self.EVALUATE = config.Model_parameters["evaluate"]
+
             
             #High level constants
             #Form
@@ -376,13 +377,13 @@ class Project:
                     
             self.DATA_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
             self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
-            self.MODEL_DIRECTORY =  os.path.join(self.PROJECT_DIRECTORY , "Models_saved" , str(self.MODEL_ARCHITECTURE) , self.FORM , str(str(self.IMG_H)+"x"+str(self.IMG_W)) , str("bs"+str(self.BATCH_SIZE) + self.PARAM_MARK)  )
+            
             
             
             
             
         def __str__(self):
-            return f"This is class representing the project, main parameters are:\n\nOriginalDatabase: {self.DATABASE_DIRECTORY}\nArchitecture Used: {self.MODEL_ARCHITECTURE}"
+            return "NO DESCRIPTION"
             
     
         def Initialize_data(self): 
@@ -398,83 +399,183 @@ class Project:
             In this module dictionary with names of classes is created as well, names are based on names of datsets
             Datasets names are based on the folder names in main database folder"""
             
-            self.X_TRAIN, self.Y_TRAIN, self.DICTIONARY = ml.DataSets.Load_And_Merge_DataSet(self.DATA_DIRECTORY , self.REDUCED_SET_SIZE )
-            self.N_CLASSES = len(self.DICTIONARY)
+            X, Y, DICTIONARY = ml.DataSets.Load_And_Merge_DataSet(self.DATA_DIRECTORY , self.REDUCED_SET_SIZE )
+            
+            return X, Y, DICTIONARY
             ########################################################
             
-        def Process_data(self):
+        def Process_data(self,X,Y):
             #3
             ########################################################
-            if self.KAGGLE_SET:
-                self.X_TRAIN , self.Y_TRAIN, self.X_VAL , self.Y_VAL = Utils.Process_Data(self.X_TRAIN, self.Y_TRAIN, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.KAGGLE_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            if not self.CREATE_TEST_SET:
+                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.CREATE_TEST_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
             
             else:
-                self.X_TRAIN , self.Y_TRAIN, self.X_VAL , self.Y_VAL , self.X_TEST , self.Y_TEST = Utils.Process_Data(self.X_TRAIN, self.Y_TRAIN, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.KAGGLE_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.CREATE_TEST_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            
+            if self.CREATE_TEST_SET:
+                X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)
+                Y_TRAIN = np.array(Y_TRAIN , dtype = self.DATA_TYPE)
+                
+                X_VAL = np.array(X_VAL/255 , dtype = self.DATA_TYPE)
+                Y_VAL = np.array(Y_VAL , dtype = self.DATA_TYPE)
+                
+                X_TEST = np.array(X_TEST/255 , dtype = self.DATA_TYPE)
+                Y_TEST = np.array(Y_TEST , dtype = self.DATA_TYPE)
+                
+                return X_TRAIN, Y_TRAIN, X_VAL, Y_VAL, X_TEST, Y_TEST 
+            
+            else:
+                X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)
+                Y_TRAIN = np.array(Y_TRAIN , dtype = self.DATA_TYPE)
+                
+                X_VAL = np.array(X_VAL/255 , dtype = self.DATA_TYPE)
+                Y_VAL = np.array(Y_VAL , dtype = self.DATA_TYPE)
+            
+                return X_TRAIN, Y_TRAIN, X_VAL, Y_VAL
+                
+            ########################################################
+            
+        def Save_Data(self,x_train,y_train,x_val,y_val,dictionary = None,x_test = None,y_test = None, new_param_mark = None):
+            self.X_TRAIN = x_train
+            self.Y_TRAIN = y_train
+            
+            self.X_VAL = x_val
+            self.Y_VAL = y_val
+            
+            
+            self.X_TEST = x_test
+            self.Y_TEST = y_test
+            
+            
+            #Redefining some self variables if there is change 
+            self.N_CLASSES = y_train.shape[1]
+            
+            if dictionary is None:
+                self.DICTIONARY = [(i,"Class: "+str(i)) for i in range(self.N_CLASSES)]
+            else:
+                self.DICTIONARY = dictionary
+            
+            
+            self.CLASS_OCCURENCE = []
+            
+            labels = np.concatenate((y_train,y_val))
+            try:
+                labels = np.concatenate((labels,y_test))
+            except:
+                pass
+            
+            for i in range(self.N_CLASSES):
+                _, class_size = np.unique(labels[:,i],return_counts = True)
+                self.CLASS_OCCURENCE.append((str(self.DICTIONARY[i][1]),int(class_size[1])))
+            
+            
+            self.IMG_H = x_train.shape[1]
+            self.IMG_W = x_train.shape[2]
             
             try:
-                self.X_TRAIN = np.array(self.X_TRAIN/255 , dtype = self.DATA_TYPE)
-                self.Y_TRAIN = np.array(self.Y_TRAIN , dtype = self.DATA_TYPE)
-                
-                self.X_VAL = np.array(self.X_VAL/255 , dtype = self.DATA_TYPE)
-                self.Y_VAL = np.array(self.Y_VAL , dtype = self.DATA_TYPE)
-                
-                self.X_TEST = np.array(self.X_TEST/255 , dtype = self.DATA_TYPE)
-                self.Y_TEST = np.array(self.Y_TEST , dtype = self.DATA_TYPE)
-            except Exception as e:
-                print("Could not standarize data:",e)
+                channels = x_train.shape[3]
+            except:
+                channels = 1 
+            
+            self.GRAYSCALE = True if channels == 1 else False
+            self.FORM = "Grayscale" if self.GRAYSCALE else "RGB"
+            self.DATA_TYPE = x_train.dtype
+            if new_param_mark is not None:
+                self.PARAM_MARK = new_param_mark
             
             
-            ########################################################
             
     
-        def Initialize_model_from_library(self):
-            #4
-            ########################################################
-            self.MODEL = Utils.Initialize_model(model_architecture = self.MODEL_ARCHITECTURE,
-                                        n_classes = self.N_CLASSES,
-                                        img_H = self.IMG_H,
-                                        img_W = self.IMG_W,
-                                        channels = self.CHANNELS,
-                                        show_architecture = self.SHOW_ARCHITECTURE
-                                        )
-            ########################################################
     
-    
-        def Initialize_weights_and_training(self, precompiled_model=None):
+        def Initialize_weights_and_training(self, Model, Train = True, Patience = 10, Min_delta_to_save = 0.1, Device = "CPU", add_config_info = None):
             #5
             ########################################################
-            if precompiled_model:
-                # Use the provided precompiled model
-                self.MODEL = precompiled_model
-            else:
-                # Use the initialized model from Initialize_model function
-                assert hasattr(self, 'MODEL'), "Model not initialized. Call Initialize_model_from_library first or use custom compiled model, f.e, from keras or your own."
+            #Create data for parameters file
+            n_classes = self.N_CLASSES
+            class_size = self.CLASS_OCCURENCE
             
+            img_H = self.IMG_H
+            img_W = self.IMG_W
+            grayscale = self.GRAYSCALE
+            Image_datatype = self.DATA_TYPE
+            Augmentation_mark = self.PARAM_MARK
+            
+            user_architecture_name = self.ARCHITECTURE_NAME
+            Model_datatype = "float32"
+            total_params = Model.count_params()
+            trainable_params, not_trainable_params = ml.General.Count_parameters(Model)
+            num_layers = len(Model.layers)
+            
+            batch_size = self.BATCH_SIZE
+            optimizer_params = str(Model.optimizer.get_config())
+            loss = Model.loss
+            
+
+            
+            # Create the content for the text file
+            content = (
+                f"Number of Classes: {n_classes}\n"
+                f"Class Size: {class_size}\n"
+                f"\n"
+                f"Image Height: {img_H}\n"
+                f"Image Width: {img_W}\n"
+                f"Grayscale: {grayscale}\n"
+                f"Image Datatype: {Image_datatype}\n"
+                f"Augmentation Mark: {Augmentation_mark}\n"
+                f"\n"
+                f"User Architecture Name: {user_architecture_name}\n"
+                f"Model Datatype: {Model_datatype}\n"
+                f"Total Parameters: {total_params}\n"
+                f"Trainable Parameters: {trainable_params}\n"
+                f"Not-Trainable Parameters: {not_trainable_params}\n"
+                f"Number of Layers: {num_layers}\n"
+                f"\n"
+                f"Batch Size: {batch_size}\n"
+                f"Optimizer Parameters: {optimizer_params}\n"
+                f"Loss function: {loss}\n"
+                f"\n"
+                f"Additional information: {add_config_info}\n"
                 
-                
+            )
+            
+            f_name = ml.General.hash_string(content)
+            model_directory = os.path.join("Models_saved", str(f_name))
+            self.MODEL_DIRECTORY = model_directory
+            if not os.path.exists(model_directory):
+                print("Model Created")
+                os.mkdir(model_directory)
+            
+            params_directory = os.path.join(model_directory,"Model_parameters.txt")
+            # Save the content to a text file
+            with open(params_directory, 'w') as file:
+                file.write(content)
+
+
             self.MODEL = Utils.Initialize_weights_and_training(x_train = self.X_TRAIN,
                                                        y_train= self.Y_TRAIN,
                                                        x_val = self.X_VAL,
                                                        y_val = self.Y_VAL,
-                                                       model = self.MODEL,
-                                                       model_directory = self.MODEL_DIRECTORY,
-                                                       model_architecture = self.MODEL_ARCHITECTURE,
-                                                       train = self.TRAIN,
+                                                       model = Model,
+                                                       model_directory = model_directory,
+                                                       train = Train,
                                                        epochs = self.EPOCHS,
-                                                       patience = self.PATIENCE,
+                                                       patience = Patience,
                                                        batch_size = self.BATCH_SIZE,
-                                                       min_delta= self.MIN_DELTA,
-                                                       device = self.DEVICE
+                                                       min_delta= Min_delta_to_save,
+                                                       device = Device
                                                        )
+            
+            return self.MODEL
             ########################################################
     
-        def Initialize_resulits(self):
+        def Initialize_resulits(self,Evaluate = False):
             #6
             ########################################################
             Utils.Initialize_Results(self.MODEL,
                                   self.MODEL_DIRECTORY,
                                   self.DICTIONARY,
-                                  self.EVALUATE,
+                                  Evaluate,
                                   self.X_TRAIN,
                                   self.Y_TRAIN,
                                   self.X_VAL,

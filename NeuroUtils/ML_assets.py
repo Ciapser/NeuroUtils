@@ -13,7 +13,7 @@ import sklearn as skl
 import itertools
 from PIL import Image
 from matplotlib.widgets import Slider
-
+import hashlib
 
 class DataSets:
     #Scenario 1
@@ -467,15 +467,58 @@ class ImageProcessing:
         return image        
 
 class General:
+    def hash_string(input_string, hash_algorithm='sha256'):
+        """
+        Hashes a string using the specified hash algorithm.
+        
+        Args:
+        - input_string (str): The string to hash.
+        - hash_algorithm (str): The hashing algorithm to use (default: 'sha256').
+                               Options include 'sha256', 'sha512', 'md5', etc.
+        
+        Returns:
+        - str: Hexadecimal representation of the hashed value.
+        """
+        # Select the hash algorithm
+        if hash_algorithm == 'sha256':
+            hash_object = hashlib.sha256()
+        elif hash_algorithm == 'sha512':
+            hash_object = hashlib.sha512()
+        elif hash_algorithm == 'md5':
+            hash_object = hashlib.md5()
+        else:
+            raise ValueError(f"Unsupported hash algorithm: {hash_algorithm}")
+    
+        # Update hash object with the input string encoded as UTF-8
+        hash_object.update(input_string.encode('utf-8'))
+    
+        # Get the hexadecimal representation of the hash digest
+        hashed_string = hash_object.hexdigest()
+        
+        return hashed_string
+    
+    
+    # Function to count trainable and non-trainable parameters
+    def Count_parameters(model):
+        trainable_count = int(
+            np.sum([tf.keras.backend.count_params(p) for p in model.trainable_weights])
+        )
+        non_trainable_count = int(
+            np.sum([tf.keras.backend.count_params(p) for p in model.non_trainable_weights])
+        )
+        return trainable_count, non_trainable_count
+    
+
     
     def Load_model_check_training_progress(model , train , epochs_to_train, model_weights_directory, model_history_directory):
         starting_epoch = None
         if train:
             try:
                 Model_history = pd.read_csv(model_history_directory)
-                starting_epoch = Model_history["epoch"].iloc[-1]
+                starting_epoch = Model_history["epoch"].iloc[-1]+1
                 try:
                     best_val_acc = Model_history["val_accuracy"].idxmax()
+                    epoch_index = (Model_history['val_accuracy'] == Model_history["val_accuracy"][best_val_acc]).idxmax()
                     
                     best_val_loss = round(Model_history["val_loss"][best_val_acc],3)
                     best_val_acc = round(Model_history["val_accuracy"][best_val_acc],3)
@@ -484,7 +527,8 @@ class General:
         
                 print("Found existing model trained for ",starting_epoch," epochs")
                 try:
-                    print("Best model score aqcuired in ",starting_epoch," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
+                    
+                    print("Best model score aqcuired in ",Model_history["epoch"][epoch_index]," epoch\nVal_acc: ",best_val_acc,"\nVal_loss: ",best_val_loss,)
                 except:
                     print("No score available")
                 if starting_epoch == epochs_to_train:
@@ -726,7 +770,7 @@ class General:
         
         if gif_array.dtype != np.uint8:
             raise ValueError("Array must be in np.uint8 format; [0-255] range")
-    
+        
         # Convert numpy arrays to PIL Images
         images = [Image.fromarray(frame) for frame in gif_array]
         images = [img.resize((gif_width,gif_height), Image.Resampling.NEAREST) for img in images]
