@@ -467,6 +467,28 @@ class ImageProcessing:
         return image        
 
 class General:
+    
+    def true_positives(y_true, y_pred):
+        y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
+        tp = np.sum(y_true * y_pred_rounded)
+        return tp 
+    
+    def true_negatives(y_true, y_pred):
+        y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
+        tn = np.sum((1 - y_true) * (1 - y_pred_rounded))
+        return tn 
+    
+    def false_positives(y_true, y_pred):
+        y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
+        fp = np.sum((1 - y_true) * y_pred_rounded)
+        return fp 
+    
+    def false_negatives(y_true, y_pred):
+        y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
+        fn = np.sum(y_true * (1 - y_pred_rounded))
+        return fn 
+    
+    
     def hash_string(input_string, hash_algorithm='sha256'):
         """
         Hashes a string using the specified hash algorithm.
@@ -598,8 +620,6 @@ class General:
         except:
             pass
 
-        
-        
         column_list = Model_training_history.columns.tolist()
         columns_score = [col for col in column_list if 'loss' not in col]
         val_score = [col for col in columns_score if 'val' in col][0]
