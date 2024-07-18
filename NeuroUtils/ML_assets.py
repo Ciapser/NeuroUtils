@@ -467,26 +467,78 @@ class ImageProcessing:
         return image        
 
 class General:
+    def calculate_metrics(true_positives,false_positives,false_negatives,true_negatives):
+        tp = true_positives
+        fp = false_positives
+        fn = false_negatives
+        tn = true_negatives
+        accuracy = (tp + tn) / (tp + fp + fn + tn)
+        precision = tp / (tp + fp + 1e-10)
+        recall = tp / (tp + fn + 1e-10)
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-10)
+        f2_score = 5 * (precision * recall) / (4 * precision + recall + 1e-10)
+        f0_5_score = 1.25 * (precision * recall) / (0.25 * precision + recall + 1e-10)
+        specificity = tn / (tn + fp + 1e-10)
+        mcc = ((tp * tn) - (fp * fn)) / (np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) + 1e-10)
+        balanced_accuracy = (recall + specificity) / 2
+        
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1_score,
+            'f2_score': f2_score,
+            'f0_5_score': f0_5_score,
+            'specificity': specificity,
+            'mcc': mcc,
+            'balanced_accuracy': balanced_accuracy
+        }
+    
+    def calculate_accuracy(true_positives, false_positives, false_negatives, true_negatives):
+        accuracy = (true_positives + true_negatives) / (true_positives + false_positives + false_negatives + true_negatives)
+        return accuracy
+    
+    def calculate_precision(true_positives, false_positives):
+        precision = true_positives / (true_positives + false_positives + 1e-10)  # Adding epsilon to avoid division by zero 
+        return precision
+    
+    def calculate_recall(true_positives, false_negatives):
+        recall = true_positives / (true_positives + false_negatives + 1e-10)  # Adding epsilon to avoid division by zero
+        return recall
+    
+    def calculate_f1_score(true_positives, false_positives, false_negatives):
+        precision = General.calculate_precision(true_positives = true_positives, false_positives = false_negatives)
+        recall = General.calculate_recall(true_positives = true_positives, false_negatives = false_negatives)
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-10)  # Adding epsilon to avoid division by zero
+        return f1_score
+    
+    def calculate_f2_score(true_positives, false_positives, false_negatives):
+        precision = General.calculate_precision(true_positives = true_positives, false_positives = false_negatives)
+        recall = General.calculate_recall(true_positives = true_positives, false_negatives = false_negatives)
+        f2_score = (1 + 2**2) * (precision * recall) / (2**2 * precision + recall + 1e-10)
+        return f2_score
+    
+    
     
     def true_positives(y_true, y_pred):
         y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
         tp = np.sum(y_true * y_pred_rounded)
-        return tp 
+        return int(tp) 
     
     def true_negatives(y_true, y_pred):
         y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
         tn = np.sum((1 - y_true) * (1 - y_pred_rounded))
-        return tn 
+        return int(tn) 
     
     def false_positives(y_true, y_pred):
         y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
         fp = np.sum((1 - y_true) * y_pred_rounded)
-        return fp 
+        return int(fp) 
     
     def false_negatives(y_true, y_pred):
         y_pred_rounded = np.round(np.clip(y_pred, 0, 1))
         fn = np.sum(y_true * (1 - y_pred_rounded))
-        return fn 
+        return int(fn) 
     
     
     def hash_string(input_string, hash_algorithm='sha256'):

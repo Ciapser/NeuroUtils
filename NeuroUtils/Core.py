@@ -18,8 +18,8 @@ from matplotlib.widgets import Slider
 import math
 import cv2
 import json
-import csv
-
+import gc
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
 class Utils:
     
@@ -200,10 +200,12 @@ class Utils:
 
             if current_score is not None:
                 if self._is_improvement(current_score, self.best_score):
-                    print(f"Epoch {epoch + 1}: Improvement detected in {self.monitor}. Saving model with score: {current_score:.4f}")
+                    print(f"\nImprovement detected in {self.monitor}. Saving model with score: {current_score:.4f}")
                     self.best_score = current_score
                     self.model.save(self.filepath)
                     self._save_best_score(self.best_score)
+                else:
+                    print(f"\nNo improvement in {self.monitor}. Not saving model. Model score: {current_score:.4f}")
 
 
         def _is_improvement(self, current, best):
@@ -213,7 +215,7 @@ class Utils:
                 return current > best + self.min_delta
             
     class MetricsCallback(tf.keras.callbacks.Callback):
-        def __init__(self, file_path='Metrics.csv', train_data = None,validation_data = None):
+        def __init__(self, file_path='Metrics.csv', train_data=None, validation_data=None):
             super().__init__()
             self.file_path = file_path
             self.train = train_data
@@ -225,39 +227,47 @@ class Utils:
                     f.write('epoch,train_tp,train_fp,train_fn,train_tn,val_tp,val_fp,val_fn,val_tn,test_tp,test_fp,test_fn,test_tn\n')
     
         def on_epoch_end(self, epoch, logs=None):
-            if self.train is None:
-                train_tp = None
-                train_fp = None
-                train_fn = None
-                train_tn = None
-            else:
+            train_metrics = [None] * 4
+            val_metrics = [None] * 4
+    
+            if self.train is not None:
+                print("Calculating metrics for train set...")
                 y_pred = self.model.predict(self.train[0])
-                train_tp = ml.General.true_positives(self.train[1], y_pred)
-                train_fp = ml.General.false_positives(self.train[1], y_pred)
-                train_fn = ml.General.false_negatives(self.train[1], y_pred)
-                train_tn = ml.General.true_negatives(self.train[1], y_pred)
-                
-                
-            if self.val is None:
-                val_tp = None
-                val_fp = None
-                val_fn = None
-                val_tn = None
-            else:
+                train_metrics = [
+                    ml.General.true_positives(self.train[1], y_pred),
+                    ml.General.false_positives(self.train[1], y_pred),
+                    ml.General.false_negatives(self.train[1], y_pred),
+                    ml.General.true_negatives(self.train[1], y_pred)
+                ]
+                del y_pred
+                tf.keras.backend.clear_session()
+                gc.collect()
+    
+            if self.val is not None:
+                print("Calculating metrics for validation set...")
                 y_pred = self.model.predict(self.val[0])
-                val_tp = ml.General.true_positives(self.val[1], y_pred)
-                val_fp = ml.General.false_positives(self.val[1], y_pred)
-                val_fn = ml.General.false_negatives(self.val[1], y_pred)
-                val_tn = ml.General.true_negatives(self.val[1], y_pred)
-                
-
+                val_metrics = [
+                    ml.General.true_positives(self.val[1], y_pred),
+                    ml.General.false_positives(self.val[1], y_pred),
+                    ml.General.false_negatives(self.val[1], y_pred),
+                    ml.General.true_negatives(self.val[1], y_pred)
+                ]
+                del y_pred
+                tf.keras.backend.clear_session()
+                gc.collect()
     
             # Append the metrics for this epoch to the CSV file
-            with open(r"C:\Users\Stacja_Robocza\Desktop\Animal-Classification\Models_saved\a339be47d1652371d81ebda18e1fc6a0be0d9b79da61f1e38af004ff3774ca70\Model_metrics.csv", mode='a') as f:
-                f.write(f'{epoch},{train_tp},{train_fp},{train_fn},{train_tn},{val_tp},{val_fp},{val_fn},{val_tn}\n')
-                
+            with open(self.file_path, mode='a') as f:
+                f.write(f'{epoch},{train_metrics[0]},{train_metrics[1]},{train_metrics[2]},{train_metrics[3]},'
+                        f'{val_metrics[0]},{val_metrics[1]},{val_metrics[2]},{val_metrics[3]}\n')
+    
+            print("-----------------------------------------------------------------------")
+            print("\n")
+    
 
-
+    class SilentProgbarLogger(tf.keras.callbacks.ProgbarLogger):
+        def on_epoch_end(self, epoch, logs=None):
+            pass  # Override to prevent the last message from being printed
 
 
                 
@@ -291,13 +301,12 @@ class Utils:
                                                          monitor='val_accuracy',
                                                          min_delta=min_delta),
                         #Checkpoint model if performance is increased
-                        Utils.SaveBestModel(filepath=model_weights_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),
-                        
-                        #Saving model metrics TP,FP,FN,TN
-                        Utils.MetricsCallback(file_path = model_metrics_directory,train_data = (x_train,y_train),validation_data = (x_val,y_val)),
-                        
+                        Utils.SaveBestModel(filepath=model_weights_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),       
                         #Save data through training
-                        tf.keras.callbacks.CSVLogger(filename = model_history_directory , append = csv_append)
+                        tf.keras.callbacks.CSVLogger(filename = model_history_directory , append = csv_append),
+                        #Saving model metrics TP,FP,FN,TN
+                        Utils.SilentProgbarLogger(count_mode = 'steps'),
+                        Utils.MetricsCallback(file_path = model_metrics_directory,train_data = (x_train,y_train),validation_data = (x_val,y_val))
                         ]
 
             with tf.device(device):
@@ -309,7 +318,9 @@ class Utils:
                           validation_data = (x_val , y_val),
                           epochs=epochs,
                           batch_size = batch_size,
-                          callbacks = callbacks
+                          callbacks = callbacks,
+                          use_multiprocessing = True,
+                          verbose = 1
                           )
                 
                 print("Time took to train model: ",round(timer()-timer_start),2)    
@@ -637,7 +648,8 @@ class Project:
             
             
         def Models_analysis(self,models_directory = "Models_saved"):
-            print("Collecting model Data")
+            print("----------------------------------------------------------------------------")
+            print("Starting trained models analysis...")
             
             #Checking for folder names, filtering if something in the folder is not another folder
             unfiltered_folders = []
@@ -684,10 +696,8 @@ class Project:
                       
                      "Loss_train",
                      "Loss_val",
-                     "Loss_test",
                      "Metrics_train_TP_FP_FN_TN",
                      "Metrics_val_TP_FP_FN_TN",
-                     "Metrics_test_TP_FP_FN_TN",
                      "Additional_info"
                      ]
                 Data = pd.DataFrame(columns = c)
@@ -696,9 +706,11 @@ class Project:
 
             #Determine if this model is already present in the data
             for model in folders:
+                print("----------------------------------------------------------------------------")
+                print("Model: ",model)
                 Model_history = pd.read_csv(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_history.csv"))
                 if Data["Model_ID"].isin([model]).any():
-                    print("Model: ",model,"present in Data")
+                    print("Model present in Data")
                     #To update if epochs has been changed
                     model_epoch = Model_history["epoch"].iloc[-1]
                     idx = Data['Model_ID'].eq(model).argmax()
@@ -706,17 +718,18 @@ class Project:
 
                     if model_epoch>analysis_epoch:
                         fill_data = True
+                        print("Model has been trained during last analysis, updating...")
                     else:
                         fill_data = False
-                        print("Data is up to date")
+                        print("Data is up to date, skipping...")
       
                     
                 else:
                     fill_data = True
+                    print("Model has not been processed yet, starting analysis")
                     
                     
                 if fill_data:
-                    print("Collecting model data...")
                     
                     param_path = os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_parameters.json")
                     with open(param_path, 'r') as json_file:
@@ -764,6 +777,7 @@ class Project:
                                          ml.General.false_negatives(y_train, y_train_p),
                                          ml.General.true_negatives(y_train, y_train_p)
                                          ]
+
                     except:
                         print("No train set found")
                         Loss_train = None
@@ -786,35 +800,24 @@ class Project:
                         Loss_val = None
                         val_metrics = None
                         
-                    try:
-                        x_test = (np.load(os.path.join(processed_data_dir,"x_test.npy"))/255).astype(Img_Dtype)
-                        y_test = np.load(os.path.join(processed_data_dir,"y_test.npy"))
-                        print("Calculating test loss...")
-                        Loss_test,_ = Keras_model.predict(x_test)
-                        print("Calculating test metrics...")
-                        y_test_p = Keras_model.evaluate(x_test,y_test)
-                        test_metrics = [ml.General.true_positives(y_test, y_test_p),
-                                         ml.General.false_positives(y_test, y_test_p),
-                                         ml.General.false_negatives(y_test, y_test_p),
-                                         ml.General.true_negatives(y_test, y_test_p)
-                                         ]
-                    except:
-                        print("No test set found")
-                        Loss_test = None 
-                        test_metrics = None
-                          
-                    
-                    Additional_info = param_data["Additional information"]
 
-                    if os.path.isfile(param_path):
+                    Additional_info = param_data["Additional information"]
+                    
+
+
+                    if os.path.isfile(Data_path):       
                         try:
-                            idx = Data['Model_ID'].eq(model).argmax()
+                            #Such model is present and its saved in the same row
+                            idx = int(Data.index[Data['Model_ID']==model].tolist()[0])
+                            
                         except:
+                            #Such model is not present yet and is saved in the new row
                             idx = len(Data['Model_ID'])
+                            
                     else:
+                        print("Data analysis file is not present yet, crating one...")
                         idx = 0
-                    print(idx)
-                    Data.loc[idx] = [   model,
+                    row_list = [   model,
                                         Model_WorkName,
                                         Model_Parameters,
                                         Model_Dtype,
@@ -836,16 +839,52 @@ class Project:
                                       
                                         Loss_train,
                                         Loss_val,
-                                        Loss_test,
                                         train_metrics,
                                         val_metrics,
-                                        test_metrics,
                                         Additional_info
                                       ]
-                    Data.to_csv(Data_path)
+                    row_list = np.array(row_list,dtype = "object")
+                    Data.loc[idx] = row_list
+                    
+                    
+                    
+                    del x_train,y_train,x_val,y_val
+                    del Model_WorkName, Model_Parameters, Model_Dtype, Batch_Size, Epochs_Trained, Epochs_toBest,Optimizer_data,Loss_type,Metrics_type
+                    del N_classes,Img_number,Aug_mark,Img_Dtype,Form,Img_H,Img_W,Loss_train,Loss_val,train_metrics,val_metrics,Additional_info
+                                        
+                
+                    tf.keras.backend.clear_session()
+                    gc.collect()
+                    #At the end of Data creation
+            Data.to_csv(Data_path,index = False)    
             
-            #At the end of Data creation
-            Data.to_csv(Data_path,index = False)
+            #Plot section
+            #Data = pd.read_csv(Data_path)
+            Data = pd.read_csv(Data_path, converters={"Metrics_train_TP_FP_FN_TN": pd.eval})
+            
+            #Calculate accuracy
+            models_high_level_metrics = []
+            for i in range(len(Data)):
+                
+                tp_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][0])   
+                fp_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][1]) 
+                fn_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][2]) 
+                tn_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][3])
+                
+                metrics = ml.General.calculate_metrics(true_positives = tp_train,
+                                                       false_positives = fp_train,
+                                                       false_negatives = fn_train,
+                                                       true_negatives = tn_train
+                                                       )
+                metrics["Model_ID"] = Data["Model_ID"][i]
+                models_high_level_metrics.append(metrics)
+                
+ 
+            return models_high_level_metrics    
+                
+                
+                
+            
 
                 
 
