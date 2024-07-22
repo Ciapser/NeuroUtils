@@ -19,6 +19,8 @@ import math
 import cv2
 import json
 import gc
+
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
 class Utils:
@@ -645,9 +647,58 @@ class Project:
                                   )
             ######################################################## 
             
+        def Analysis_plot(self,x_labels,metrics,save_plots,show_plots,plot_title):
+            #Basic metrics plots
+            ##########################################################################################
+            x = np.arange(len(x_labels))  # the label locations
+            width = 0.13  # the width of the bars, reduced to make clusters tighter
+            multiplier = 0
+            
+            fig, ax = plt.subplots(figsize=(10, 5))  # Setting the figure size
+            min_y = 1
+            for attribute, value in metrics.items():
+                
+                offset = width * multiplier
+                value = [round(v, 3) for v in value]
+                rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
+                labels = ax.bar_label(rects, padding=3)
+                for label in labels:
+                    label.set_fontsize('small')  # Set the fontsize here
+                multiplier += 1
+                if min_y > min(value):
+                    min_y = min(value)
+                else:
+                    pass
+                
+            
+            # Add some text for labels, title and custom x-axis tick labels, etc.
+            ax.set_ylabel('Value\n Range: [0-1]')
+            ax.set_title(plot_title)
+            ax.set_xticks(x + width * (multiplier - 1) / 2, x_labels)  # Adjusted to center the labels
+            ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
+            min_y = np.floor((min_y*0.9) / 0.02) * 0.02
+            ax.set_ylim(min_y, 1)
             
             
-        def Models_analysis(self,models_directory = "Models_saved"):
+            # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
+            plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1)  # Adjust right to leave space for the legend
+            
+            ax.set_axisbelow(True)
+            ax.grid(color='gray', linestyle='dashed')
+            
+            # Save the figure with reduced white space
+            plt.show()
+            if save_plots:
+                file_name = plot_title+".png"
+                basic_metrics_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis", file_name)
+                fig.savefig(basic_metrics_path, bbox_inches='tight')
+                
+            if not show_plots:
+                plt.close()
+            ##########################################################################################            
+            
+            
+        def Models_analysis(self,models_directory = "Models_saved", save_plots = True, show_plots = True):
             print("----------------------------------------------------------------------------")
             print("Starting trained models analysis...")
             
@@ -698,6 +749,10 @@ class Project:
                      "Loss_val",
                      "Metrics_train_TP_FP_FN_TN",
                      "Metrics_val_TP_FP_FN_TN",
+                     
+                     "Train_ROC_data",
+                     "Val_ROC_data",
+                     
                      "Additional_info"
                      ]
                 Data = pd.DataFrame(columns = c)
@@ -777,7 +832,9 @@ class Project:
                                          ml.General.false_negatives(y_train, y_train_p),
                                          ml.General.true_negatives(y_train, y_train_p)
                                          ]
-
+                        #Calculating ROC_AUC
+                        train_ROC_AUC = ml.General.compute_multiclass_roc_auc(y_true = y_train, y_pred = y_train_p)
+                        
                     except:
                         print("No train set found")
                         Loss_train = None
@@ -795,6 +852,12 @@ class Project:
                                          ml.General.false_negatives(y_val, y_val_p),
                                          ml.General.true_negatives(y_val, y_val_p)
                                          ]
+                        #Calculating ROC_AUC
+                        val_ROC_AUC = ml.General.compute_multiclass_roc_auc(y_true = y_val, y_pred = y_val_p)
+                        
+
+                        
+                        
                     except:
                         print("No validation set found")
                         Loss_val = None
@@ -841,6 +904,10 @@ class Project:
                                         Loss_val,
                                         train_metrics,
                                         val_metrics,
+                                        
+                                        train_ROC_AUC,
+                                        val_ROC_AUC,
+                                        
                                         Additional_info
                                       ]
                     row_list = np.array(row_list,dtype = "object")
@@ -856,14 +923,18 @@ class Project:
                     tf.keras.backend.clear_session()
                     gc.collect()
                     #At the end of Data creation
-            Data.to_csv(Data_path,index = False)    
+                    Data.to_csv(Data_path,index = False)    
             
-            #Plot section
+            ####################################################################################################
             #Data = pd.read_csv(Data_path)
-            Data = pd.read_csv(Data_path, converters={"Metrics_train_TP_FP_FN_TN": pd.eval})
+            Data = pd.read_csv(Data_path, converters={"Metrics_train_TP_FP_FN_TN": pd.eval,
+                                                      "Metrics_val_TP_FP_FN_TN": pd.eval,
+                                                      "Train_ROC_data": pd.eval,
+                                                      "Val_ROC_data": pd.eval})
+
             
             #Calculate accuracy
-            models_high_level_metrics = []
+            models_high_level_metrics = {}
             for i in range(len(Data)):
                 
                 tp_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][0])   
@@ -876,11 +947,97 @@ class Project:
                                                        false_negatives = fn_train,
                                                        true_negatives = tn_train
                                                        )
-                metrics["Model_ID"] = Data["Model_ID"][i]
-                models_high_level_metrics.append(metrics)
+                
+                metrics["ROC_scores"] = Data["Train_ROC_data"][i]
+                models_high_level_metrics[Data["Model_ID"][i]] = metrics
+                
                 
  
-            return models_high_level_metrics    
+            
+        
+            #Plotting models
+            
+            #Accuracy
+            acc = []
+            prec = []
+            rec = []
+            spec = []
+            
+            f05 = []
+            f1 = []
+            f2 =[]
+            
+            bal_acc = []
+            ROC_AUC = []
+            
+            x_labels = []
+            
+            for model in folders:
+                acc.append(models_high_level_metrics[model]['accuracy'])
+                prec.append(models_high_level_metrics[model]['precision'])
+                rec.append(models_high_level_metrics[model]['recall'])
+                spec.append(models_high_level_metrics[model]['specificity'])
+                
+                f05.append(models_high_level_metrics[model]['f0_5_score'])
+                f1.append(models_high_level_metrics[model]['f1_score'])
+                f2.append(models_high_level_metrics[model]['f2_score'])
+                
+                bal_acc.append(models_high_level_metrics[model]['balanced_accuracy'])
+                ROC_AUC.append(models_high_level_metrics[model]['ROC_scores'][0])
+
+                x_labels.append(model[:4])
+
+            #Plot
+            models_basic_metrics = {
+                'Accuracy': acc,
+                'Precision': prec,
+                'Recall': rec,
+                'Specificity': spec
+            }
+            
+            models_f_scores = {
+                'F05_score': f05,
+                'F1_score': f1,
+                'F2_score': f2,
+            }
+            
+            Balanced_metrics = {
+                'Balanced_accuracy': bal_acc,
+                'ROC_AUC': ROC_AUC,
+            }
+
+            self.Analysis_plot(x_labels = x_labels,
+                               metrics = models_basic_metrics,
+                               save_plots = save_plots,
+                               show_plots = show_plots,
+                               plot_title = "Basic metrics"
+                               )
+            
+            self.Analysis_plot(x_labels = x_labels,
+                               metrics = models_f_scores,
+                               save_plots = save_plots,
+                               show_plots = show_plots,
+                               plot_title = "F scores"
+                               )
+            
+            self.Analysis_plot(x_labels = x_labels,
+                               metrics = Balanced_metrics,
+                               save_plots = save_plots,
+                               show_plots = show_plots,
+                               plot_title = "Inbalance resistant metrics"
+                               )
+            
+            
+            
+            return models_high_level_metrics
+
+                
+
+            
+        
+            
+        
+            
                 
                 
                 

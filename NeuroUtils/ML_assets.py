@@ -14,6 +14,7 @@ import itertools
 from PIL import Image
 from matplotlib.widgets import Slider
 import hashlib
+from sklearn.metrics import roc_auc_score, roc_curve, auc
 
 class DataSets:
     #Scenario 1
@@ -467,11 +468,31 @@ class ImageProcessing:
         return image        
 
 class General:
+    def compute_multiclass_roc_auc(y_true, y_pred):
+        # Ensure y_true and y_pred have correct shapes
+        if y_true.shape[0] != y_pred.shape[0]:
+            raise ValueError(f'Number of samples in y_true ({y_true.shape[0]}) does not match number of samples in y_pred ({y_pred.shape[0]})')
+
+        n_classes = y_true.shape[1]
+
+        # Compute the macro-average ROC AUC score
+        roc_auc = roc_auc_score(y_true, y_pred, average='macro', multi_class='ovr')
+
+        # Compute ROC AUC for each class
+        roc_auc_per_class = []
+        for i in range(n_classes):
+            fpr, tpr, _ = roc_curve(y_true[:, i], y_pred[:, i])
+            roc_auc_per_class.append(auc(fpr, tpr))
+
+        return roc_auc, roc_auc_per_class
+    
+    
     def calculate_metrics(true_positives,false_positives,false_negatives,true_negatives):
         tp = true_positives
         fp = false_positives
         fn = false_negatives
         tn = true_negatives
+        
         accuracy = (tp + tn) / (tp + fp + fn + tn)
         precision = tp / (tp + fp + 1e-10)
         recall = tp / (tp + fn + 1e-10)
@@ -479,7 +500,6 @@ class General:
         f2_score = 5 * (precision * recall) / (4 * precision + recall + 1e-10)
         f0_5_score = 1.25 * (precision * recall) / (0.25 * precision + recall + 1e-10)
         specificity = tn / (tn + fp + 1e-10)
-        mcc = ((tp * tn) - (fp * fn)) / (np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) + 1e-10)
         balanced_accuracy = (recall + specificity) / 2
         
         return {
@@ -490,7 +510,6 @@ class General:
             'f2_score': f2_score,
             'f0_5_score': f0_5_score,
             'specificity': specificity,
-            'mcc': mcc,
             'balanced_accuracy': balanced_accuracy
         }
     
