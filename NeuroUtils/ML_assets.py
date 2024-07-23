@@ -15,6 +15,15 @@ from PIL import Image
 from matplotlib.widgets import Slider
 import hashlib
 from sklearn.metrics import roc_auc_score, roc_curve, auc
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    balanced_accuracy_score,
+    confusion_matrix
+)
+
 
 class DataSets:
     #Scenario 1
@@ -487,55 +496,64 @@ class General:
         return roc_auc, roc_auc_per_class
     
     
-    def calculate_metrics(true_positives,false_positives,false_negatives,true_negatives):
-        tp = true_positives
-        fp = false_positives
-        fn = false_negatives
-        tn = true_negatives
-        
-        accuracy = (tp + tn) / (tp + fp + fn + tn)
-        precision = tp / (tp + fp + 1e-10)
-        recall = tp / (tp + fn + 1e-10)
-        f1_score = 2 * (precision * recall) / (precision + recall + 1e-10)
-        f2_score = 5 * (precision * recall) / (4 * precision + recall + 1e-10)
-        f0_5_score = 1.25 * (precision * recall) / (0.25 * precision + recall + 1e-10)
-        specificity = tn / (tn + fp + 1e-10)
-        balanced_accuracy = (recall + specificity) / 2
-        
+    def calculate_main_metrics(y_true_one_hot, y_pred_prob_one_hot):
+        """
+        Calculate various classification metrics from one-hot encoded true labels and predicted probabilities.
+    
+        Parameters:
+        - y_true_one_hot: np.ndarray, shape (num_samples, num_classes)
+          One-hot encoded true labels.
+        - y_pred_prob: np.ndarray, shape (num_samples, num_classes)
+          Predicted class probabilities from the model.
+    
+        Returns:
+        - dict: Dictionary containing accuracy, precision, recall, f1_score, f2_score, f0.5_score, specificity, balanced_accuracy
+        """
+        # Convert one-hot encoded true labels to class labels
+        y_true = np.argmax(y_true_one_hot, axis=1)
+        # Convert predicted probabilities to class labels
+        y_pred = np.argmax(y_pred_prob_one_hot, axis=1)
+    
+        # Calculate confusion matrix
+        num_classes = y_pred_prob_one_hot.shape[1]
+        cm = confusion_matrix(y_true, y_pred, labels=np.arange(num_classes))
+    
+        # Calculate specificity for each class
+        specificity = []
+        for i in range(num_classes):
+            tn = np.sum(cm) - (np.sum(cm[i, :]) + np.sum(cm[:, i]) - cm[i, i])
+            fp = np.sum(cm[:, i]) - cm[i, i]
+            specificity.append(tn / (tn + fp + 1e-10))  # Avoid division by zero
+        specificity = np.mean(specificity)
+    
+    
+    
+        # Calculate metrics
+        accuracy = accuracy_score(y_true, y_pred)
+        precision = precision_score(y_true, y_pred, average='macro')
+        recall = recall_score(y_true, y_pred, average='macro')
+        f1 = f1_score(y_true, y_pred, average='macro')
+        f2_score = General.calculate_fbeta_score(y_true, y_pred, beta=2)
+        f0_5_score = General.calculate_fbeta_score(y_true, y_pred, beta=0.5)
+        balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
+    
         return {
             'accuracy': accuracy,
             'precision': precision,
             'recall': recall,
-            'f1_score': f1_score,
+            'f1_score': f1,
             'f2_score': f2_score,
             'f0_5_score': f0_5_score,
             'specificity': specificity,
             'balanced_accuracy': balanced_accuracy
         }
     
-    def calculate_accuracy(true_positives, false_positives, false_negatives, true_negatives):
-        accuracy = (true_positives + true_negatives) / (true_positives + false_positives + false_negatives + true_negatives)
-        return accuracy
-    
-    def calculate_precision(true_positives, false_positives):
-        precision = true_positives / (true_positives + false_positives + 1e-10)  # Adding epsilon to avoid division by zero 
-        return precision
-    
-    def calculate_recall(true_positives, false_negatives):
-        recall = true_positives / (true_positives + false_negatives + 1e-10)  # Adding epsilon to avoid division by zero
-        return recall
-    
-    def calculate_f1_score(true_positives, false_positives, false_negatives):
-        precision = General.calculate_precision(true_positives = true_positives, false_positives = false_negatives)
-        recall = General.calculate_recall(true_positives = true_positives, false_negatives = false_negatives)
-        f1_score = 2 * (precision * recall) / (precision + recall + 1e-10)  # Adding epsilon to avoid division by zero
-        return f1_score
-    
-    def calculate_f2_score(true_positives, false_positives, false_negatives):
-        precision = General.calculate_precision(true_positives = true_positives, false_positives = false_negatives)
-        recall = General.calculate_recall(true_positives = true_positives, false_negatives = false_negatives)
-        f2_score = (1 + 2**2) * (precision * recall) / (2**2 * precision + recall + 1e-10)
-        return f2_score
+    # Calculate F-beta scores
+    def calculate_fbeta_score(y_true, y_pred, beta):
+        precision = precision_score(y_true, y_pred, average='macro')
+        recall = recall_score(y_true, y_pred, average='macro')
+        fbeta = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall + 1e-10)
+        return fbeta
     
     
     

@@ -19,6 +19,7 @@ import math
 import cv2
 import json
 import gc
+import ast
 
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
@@ -207,7 +208,7 @@ class Utils:
                     self.model.save(self.filepath)
                     self._save_best_score(self.best_score)
                 else:
-                    print(f"\nNo improvement in {self.monitor}. Not saving model. Model score: {current_score:.4f}")
+                    print(f"\nNo improvement in {self.monitor}. Not saving model. Model score: {current_score:.4f} vs {self.best_score:.4f}")
 
 
         def _is_improvement(self, current, best):
@@ -631,7 +632,7 @@ class Project:
             return self.MODEL
             ########################################################
     
-        def Initialize_resulits(self,Evaluate = False):
+        def Initialize_results(self,Evaluate = False):
             #6
             ########################################################
             Utils.Initialize_Results(self.MODEL,
@@ -647,17 +648,16 @@ class Project:
                                   )
             ######################################################## 
             
-        def Analysis_plot(self,x_labels,metrics,save_plots,show_plots,plot_title):
-            #Basic metrics plots
-            ##########################################################################################
+        def Analysis_plot(self, metrics_train, metrics_val, x_labels, plot_title, save_plots, show_plots):
+            fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(2*len(x_labels), 10))  # Two subplots, one above the other
+            
+            # Plot for training data
+            ax = axes[0]
             x = np.arange(len(x_labels))  # the label locations
             width = 0.13  # the width of the bars, reduced to make clusters tighter
             multiplier = 0
-            
-            fig, ax = plt.subplots(figsize=(10, 5))  # Setting the figure size
             min_y = 1
-            for attribute, value in metrics.items():
-                
+            for attribute, value in metrics_train.items():
                 offset = width * multiplier
                 value = [round(v, 3) for v in value]
                 rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
@@ -667,32 +667,55 @@ class Project:
                 multiplier += 1
                 if min_y > min(value):
                     min_y = min(value)
-                else:
-                    pass
-                
             
-            # Add some text for labels, title and custom x-axis tick labels, etc.
             ax.set_ylabel('Value\n Range: [0-1]')
-            ax.set_title(plot_title)
-            ax.set_xticks(x + width * (multiplier - 1) / 2, x_labels)  # Adjusted to center the labels
+            ax.set_title(plot_title + ' (Train)')
+            ax.set_xticks(x + width * (multiplier - 1) / 2)
+            ax.set_xticklabels(x_labels, fontsize=7)
             ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
-            min_y = np.floor((min_y*0.9) / 0.02) * 0.02
+            min_y = np.floor((min_y * 0.9) / 0.02) * 0.02
             ax.set_ylim(min_y, 1)
-            
-            
-            # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
-            plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1)  # Adjust right to leave space for the legend
-            
+            ax.set_axisbelow(True)
+            ax.grid(color='gray', linestyle='dashed')
+
+            # Plot for validation data
+            ax = axes[1]
+            x = np.arange(len(x_labels))  # the label locations
+            width = 0.13  # the width of the bars, reduced to make clusters tighter
+            multiplier = 0
+            min_y = 1
+            for attribute, value in metrics_val.items():
+                offset = width * multiplier
+                value = [round(v, 3) for v in value]
+                rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
+                labels = ax.bar_label(rects, padding=3)
+                for label in labels:
+                    label.set_fontsize('small')  # Set the fontsize here
+                multiplier += 1
+                if min_y > min(value):
+                    min_y = min(value)
+
+            ax.set_ylabel('Value\n Range: [0-1]')
+            ax.set_title(plot_title + ' (Validation)')
+            ax.set_xticks(x + width * (multiplier - 1) / 2)
+            ax.set_xticklabels(x_labels, fontsize=7)
+            ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
+            min_y = np.floor((min_y * 0.9) / 0.02) * 0.02
+            ax.set_ylim(min_y, 1)
             ax.set_axisbelow(True)
             ax.grid(color='gray', linestyle='dashed')
             
-            # Save the figure with reduced white space
-            plt.show()
+            # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
+            plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1, hspace=0.5)  # Adjust right to leave space for the legend, hspace for vertical space between plots
+
+            # Show the plot
+            if show_plots:
+                plt.show()
             if save_plots:
-                file_name = plot_title+".png"
+                file_name = plot_title + ".png"
                 basic_metrics_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis", file_name)
-                fig.savefig(basic_metrics_path, bbox_inches='tight')
-                
+                fig.savefig(basic_metrics_path, bbox_inches='tight', dpi=300)
+
             if not show_plots:
                 plt.close()
             ##########################################################################################            
@@ -735,7 +758,6 @@ class Project:
                      
                      "Optimizer_data",
                      "Loss_type",
-                     "Metrics_type",
 
                      "N_classes",
                      "Img_number",
@@ -747,11 +769,11 @@ class Project:
                       
                      "Loss_train",
                      "Loss_val",
-                     "Metrics_train_TP_FP_FN_TN",
-                     "Metrics_val_TP_FP_FN_TN",
                      
-                     "Train_ROC_data",
-                     "Val_ROC_data",
+                     "Train_y_true",
+                     "Train_y_pred",
+                     "Val_y_true",
+                     "Val_y_pred",
                      
                      "Additional_info"
                      ]
@@ -800,7 +822,6 @@ class Project:
                     
                     Optimizer_data = param_data["Optimizer Parameters"]
                     Loss_type = param_data["Loss function"]
-                    Metrics_type = "to add"
 
                     N_classes = param_data["Number of Classes"]
                     Class_size = param_data["Class Size"]
@@ -824,44 +845,32 @@ class Project:
                         y_train = np.load(os.path.join(processed_data_dir,"y_train.npy"))
                         print("Calculating train loss...")
                         Loss_train,_ = Keras_model.evaluate(x_train,y_train)
-                        print("Calculating train metrics...")
-                        y_train_p = Keras_model.predict(x_train)
                         
-                        train_metrics = [ml.General.true_positives(y_train, y_train_p),
-                                         ml.General.false_positives(y_train, y_train_p),
-                                         ml.General.false_negatives(y_train, y_train_p),
-                                         ml.General.true_negatives(y_train, y_train_p)
-                                         ]
-                        #Calculating ROC_AUC
-                        train_ROC_AUC = ml.General.compute_multiclass_roc_auc(y_true = y_train, y_pred = y_train_p)
+                        train_y_true = np.argmax(y_train,axis = 1).astype(int).tolist()
                         
+                        train_y_pred = Keras_model.predict(x_train)
+                        train_y_pred = np.argmax(train_y_pred,axis = 1).astype(int).tolist()
+
                     except:
                         print("No train set found")
                         Loss_train = None
-                        train_metrics = None
+
 
                     try:
                         x_val = (np.load(os.path.join(processed_data_dir,"x_val.npy"))/255).astype(Img_Dtype)
                         y_val = np.load(os.path.join(processed_data_dir,"y_val.npy"))
                         print("Calculating validation loss...")
                         Loss_val,_ = Keras_model.evaluate(x_val,y_val)
-                        print("Calculating validation metrics...")
-                        y_val_p = Keras_model.predict(x_val)
-                        val_metrics = [ml.General.true_positives(y_val, y_val_p),
-                                         ml.General.false_positives(y_val, y_val_p),
-                                         ml.General.false_negatives(y_val, y_val_p),
-                                         ml.General.true_negatives(y_val, y_val_p)
-                                         ]
-                        #Calculating ROC_AUC
-                        val_ROC_AUC = ml.General.compute_multiclass_roc_auc(y_true = y_val, y_pred = y_val_p)
                         
+                        val_y_true = np.argmax(y_val,axis = 1).astype(int).tolist()
+                        
+                        val_y_pred = Keras_model.predict(x_val)
+                        val_y_pred = np.argmax(val_y_pred,axis = 1).astype(int).tolist()
 
-                        
-                        
                     except:
                         print("No validation set found")
                         Loss_val = None
-                        val_metrics = None
+
                         
 
                     Additional_info = param_data["Additional information"]
@@ -890,7 +899,6 @@ class Project:
                                      
                                         Optimizer_data,
                                         Loss_type,
-                                        Metrics_type,
             
                                         N_classes,
                                         Img_number,
@@ -902,12 +910,12 @@ class Project:
                                       
                                         Loss_train,
                                         Loss_val,
-                                        train_metrics,
-                                        val_metrics,
                                         
-                                        train_ROC_AUC,
-                                        val_ROC_AUC,
-                                        
+                                        train_y_true,
+                                        train_y_pred,
+                                        val_y_true,
+                                        val_y_pred,
+
                                         Additional_info
                                       ]
                     row_list = np.array(row_list,dtype = "object")
@@ -916,8 +924,8 @@ class Project:
                     
                     
                     del x_train,y_train,x_val,y_val
-                    del Model_WorkName, Model_Parameters, Model_Dtype, Batch_Size, Epochs_Trained, Epochs_toBest,Optimizer_data,Loss_type,Metrics_type
-                    del N_classes,Img_number,Aug_mark,Img_Dtype,Form,Img_H,Img_W,Loss_train,Loss_val,train_metrics,val_metrics,Additional_info
+                    del Model_WorkName, Model_Parameters, Model_Dtype, Batch_Size, Epochs_Trained, Epochs_toBest,Optimizer_data,Loss_type
+                    del N_classes,Img_number,Aug_mark,Img_Dtype,Form,Img_H,Img_W,Loss_train,Loss_val,Additional_info
                                         
                 
                     tf.keras.backend.clear_session()
@@ -926,110 +934,195 @@ class Project:
                     Data.to_csv(Data_path,index = False)    
             
             ####################################################################################################
-            #Data = pd.read_csv(Data_path)
-            Data = pd.read_csv(Data_path, converters={"Metrics_train_TP_FP_FN_TN": pd.eval,
-                                                      "Metrics_val_TP_FP_FN_TN": pd.eval,
-                                                      "Train_ROC_data": pd.eval,
-                                                      "Val_ROC_data": pd.eval})
+            Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
+                                                      'Train_y_pred': pd.eval,
+                                                      'Val_y_true': pd.eval,
+                                                      'Val_y_pred': pd.eval
+                                                      })
 
-            
+
             #Calculate accuracy
-            models_high_level_metrics = {}
+            train_models_high_level_metrics = {}
+            val_models_high_level_metrics = {}
             for i in range(len(Data)):
+                #Train data
+                train_y_true = Data["Train_y_true"][i]
+                train_y_pred = Data["Train_y_pred"][i]
                 
-                tp_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][0])   
-                fp_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][1]) 
-                fn_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][2]) 
-                tn_train = int(Data["Metrics_train_TP_FP_FN_TN"][i][3])
+                train_y_true = ml.General.OneHot_decode(train_y_true)
+                train_y_pred = ml.General.OneHot_decode(train_y_pred)
                 
-                metrics = ml.General.calculate_metrics(true_positives = tp_train,
-                                                       false_positives = fp_train,
-                                                       false_negatives = fn_train,
-                                                       true_negatives = tn_train
-                                                       )
+                train_metrics = ml.General.calculate_main_metrics(y_true_one_hot = train_y_true,
+                                                                  y_pred_prob_one_hot = train_y_pred
+                                                                  )
                 
-                metrics["ROC_scores"] = Data["Train_ROC_data"][i]
-                models_high_level_metrics[Data["Model_ID"][i]] = metrics
+                train_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = train_y_true,
+                                                                                    y_pred = train_y_pred
+                                                                                    )
+                train_models_high_level_metrics[Data["Model_ID"][i]] = train_metrics
                 
+                #Val data
+                val_y_true = Data["Val_y_true"][i]
+                val_y_pred = Data["Val_y_pred"][i]
                 
- 
+                val_y_true = ml.General.OneHot_decode(val_y_true)
+                val_y_pred = ml.General.OneHot_decode(val_y_pred)
+                
+                val_metrics = ml.General.calculate_main_metrics(y_true_one_hot = val_y_true,
+                                                                  y_pred_prob_one_hot = val_y_pred
+                                                                  )
+                
+                val_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = val_y_true,
+                                                                                    y_pred = val_y_pred
+                                                                                    )
+                val_models_high_level_metrics[Data["Model_ID"][i]] = val_metrics
+                
+
+
+            #Train lists
+            t_acc = []
+            t_prec = []
+            t_rec = []
+            t_spec = []
+            t_f05 = []
+            t_f1 = []
+            t_f2 =[]
+            t_bal_acc = []
+            t_ROC_AUC = []
             
-        
-            #Plotting models
-            
-            #Accuracy
-            acc = []
-            prec = []
-            rec = []
-            spec = []
-            
-            f05 = []
-            f1 = []
-            f2 =[]
-            
-            bal_acc = []
-            ROC_AUC = []
+            #Val lists
+            v_acc = []
+            v_prec = []
+            v_rec = []
+            v_spec = []
+            v_f05 = []
+            v_f1 = []
+            v_f2 =[]
+            v_bal_acc = []
+            v_ROC_AUC = []
             
             x_labels = []
             
             for model in folders:
-                acc.append(models_high_level_metrics[model]['accuracy'])
-                prec.append(models_high_level_metrics[model]['precision'])
-                rec.append(models_high_level_metrics[model]['recall'])
-                spec.append(models_high_level_metrics[model]['specificity'])
+                #Train data
+                t_acc.append(train_models_high_level_metrics[model]['accuracy'])
+                t_prec.append(train_models_high_level_metrics[model]['precision'])
+                t_rec.append(train_models_high_level_metrics[model]['recall'])
+                t_spec.append(train_models_high_level_metrics[model]['specificity'])
                 
-                f05.append(models_high_level_metrics[model]['f0_5_score'])
-                f1.append(models_high_level_metrics[model]['f1_score'])
-                f2.append(models_high_level_metrics[model]['f2_score'])
+                t_f05.append(train_models_high_level_metrics[model]['f0_5_score'])
+                t_f1.append(train_models_high_level_metrics[model]['f1_score'])
+                t_f2.append(train_models_high_level_metrics[model]['f2_score'])
                 
-                bal_acc.append(models_high_level_metrics[model]['balanced_accuracy'])
-                ROC_AUC.append(models_high_level_metrics[model]['ROC_scores'][0])
+                t_bal_acc.append(train_models_high_level_metrics[model]['balanced_accuracy'])
+                t_ROC_AUC.append(train_models_high_level_metrics[model]['ROC_scores'][0])
+                
+                #Val data
+                v_acc.append(val_models_high_level_metrics[model]['accuracy'])
+                v_prec.append(val_models_high_level_metrics[model]['precision'])
+                v_rec.append(val_models_high_level_metrics[model]['recall'])
+                v_spec.append(val_models_high_level_metrics[model]['specificity'])
+                
+                v_f05.append(val_models_high_level_metrics[model]['f0_5_score'])
+                v_f1.append(val_models_high_level_metrics[model]['f1_score'])
+                v_f2.append(val_models_high_level_metrics[model]['f2_score'])
+                
+                v_bal_acc.append(val_models_high_level_metrics[model]['balanced_accuracy'])
+                v_ROC_AUC.append(val_models_high_level_metrics[model]['ROC_scores'][0])
 
-                x_labels.append(model[:4])
 
-            #Plot
-            models_basic_metrics = {
-                'Accuracy': acc,
-                'Precision': prec,
-                'Recall': rec,
-                'Specificity': spec
+
+                #Model plot display name
+                idx = int(Data.index[Data['Model_ID']==model].tolist()[0])
+                
+                Name_label = Data["Model_WorkName"][idx]
+                
+                Model_label = Data["Model_Parameters"][idx]
+                Model_Dtype = Data["Model_Dtype"][idx]
+                if len(str(Model_label)) >3 and len(str(Model_label))<6:
+                    Model_label = str(round(Model_label/1e3,1))+ "K_"+Model_Dtype
+                elif len(str(Model_label)) >=6:
+                    Model_label = str(round(Model_label/1e6,1))+ "M_"+Model_Dtype
+                    
+                
+                Img_H = Data["Img_H"][idx]
+                Img_W = Data["Img_W"][idx]
+                Img_Dtype = Data["Img_Dtype"][idx]
+                Img_Form = Data["Form"][idx]
+                
+                Img_label = str(Img_H) +"x"+ str(Img_W)+ " "+Img_Form+"_"+Img_Dtype
+                
+                bs = str(Data["Batch_size"][idx])
+                Opt = ast.literal_eval(Data["Optimizer_data"][idx])['name']
+                loss = str(Data["Loss_type"][idx])
+                Train_label = "Opt:"+Opt+" B_size: "+bs +"\nLoss: "+loss
+                
+                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label
+
+                x_labels.append(Plot_label)
+                
+            #Plot dta for train
+            t_models_basic_metrics = {
+                'Accuracy': t_acc,
+                'Precision': t_prec,
+                'Recall': t_rec,
+                'Specificity': t_spec
             }
             
-            models_f_scores = {
-                'F05_score': f05,
-                'F1_score': f1,
-                'F2_score': f2,
+            t_models_f_scores = {
+                'F05_score': t_f05,
+                'F1_score': t_f1,
+                'F2_score': t_f2,
             }
             
-            Balanced_metrics = {
-                'Balanced_accuracy': bal_acc,
-                'ROC_AUC': ROC_AUC,
+            t_Balanced_metrics = {
+                'Balanced_accuracy': t_bal_acc,
+                'ROC_AUC': t_ROC_AUC,
+            }
+            
+            #Plot dta for val v_
+            v_models_basic_metrics = {
+                'Accuracy': v_acc,
+                'Precision': v_prec,
+                'Recall': v_rec,
+                'Specificity': v_spec
+            }
+            
+            v_models_f_scores = {
+                'F05_score': v_f05,
+                'F1_score': v_f1,
+                'F2_score': v_f2,
+            }
+            
+            v_Balanced_metrics = {
+                'Balanced_accuracy': v_bal_acc,
+                'ROC_AUC': v_ROC_AUC,
             }
 
-            self.Analysis_plot(x_labels = x_labels,
-                               metrics = models_basic_metrics,
+            self.Analysis_plot(metrics_train = t_models_basic_metrics,
+                               metrics_val = v_models_basic_metrics,
+                               x_labels = x_labels,
+                               plot_title = "Basic metrics",
                                save_plots = save_plots,
-                               show_plots = show_plots,
-                               plot_title = "Basic metrics"
-                               )
+                               show_plots =show_plots)
             
-            self.Analysis_plot(x_labels = x_labels,
-                               metrics = models_f_scores,
+            self.Analysis_plot(metrics_train = t_models_f_scores,
+                               metrics_val = v_models_f_scores,
+                               x_labels = x_labels,
+                               plot_title = "F scores",
                                save_plots = save_plots,
-                               show_plots = show_plots,
-                               plot_title = "F scores"
-                               )
+                               show_plots =show_plots)
             
-            self.Analysis_plot(x_labels = x_labels,
-                               metrics = Balanced_metrics,
+            self.Analysis_plot(metrics_train = t_Balanced_metrics,
+                               metrics_val = v_Balanced_metrics,
+                               x_labels = x_labels,
+                               plot_title = "Inbalance resistant metrics",
                                save_plots = save_plots,
-                               show_plots = show_plots,
-                               plot_title = "Inbalance resistant metrics"
-                               )
+                               show_plots =show_plots)
             
             
             
-            return models_high_level_metrics
+
 
                 
 
