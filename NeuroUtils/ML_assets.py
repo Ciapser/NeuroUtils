@@ -14,6 +14,7 @@ import itertools
 from PIL import Image
 from matplotlib.widgets import Slider
 import hashlib
+import math
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.metrics import (
     accuracy_score,
@@ -179,7 +180,8 @@ class DataSets:
                 #Checking if label is present in data, it indicates its not test data
                 if 'label' in data.columns:
                     labels = np.array(data["label"].values , dtype = int)
-                    y = General.OneHot_decode(labels)
+                    n_classes = max(labels)+1
+                    y = General.OneHot_decode(labels,n_classes)
                     data.drop(columns=['label'], inplace=True)
                 
                 else:
@@ -477,6 +479,16 @@ class ImageProcessing:
         return image        
 
 class General:
+    def compute_overtrain_metric(train_metric,val_metric, alpha = 2):
+        otr = (train_metric - val_metric) / train_metric
+        ofi = otr * math.exp(alpha * train_metric)
+        normalized_ofi = ofi / math.exp(alpha)
+        return normalized_ofi
+    
+    
+    
+    
+    
     def compute_multiclass_roc_auc(y_true, y_pred):
         # Ensure y_true and y_pred have correct shapes
         if y_true.shape[0] != y_pred.shape[0]:
@@ -530,9 +542,9 @@ class General:
     
         # Calculate metrics
         accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred, average='macro')
-        recall = recall_score(y_true, y_pred, average='macro')
-        f1 = f1_score(y_true, y_pred, average='macro')
+        precision = precision_score(y_true, y_pred, average='macro', zero_division = 0)
+        recall = recall_score(y_true, y_pred, average='macro', zero_division=0)
+        f1 = f1_score(y_true, y_pred, average='macro', zero_division = 0)
         f2_score = General.calculate_fbeta_score(y_true, y_pred, beta=2)
         f0_5_score = General.calculate_fbeta_score(y_true, y_pred, beta=0.5)
         balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
@@ -550,8 +562,8 @@ class General:
     
     # Calculate F-beta scores
     def calculate_fbeta_score(y_true, y_pred, beta):
-        precision = precision_score(y_true, y_pred, average='macro')
-        recall = recall_score(y_true, y_pred, average='macro')
+        precision = precision_score(y_true, y_pred, average='macro', zero_division = 0)
+        recall = recall_score(y_true, y_pred, average='macro', zero_division = 0)
         fbeta = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall + 1e-10)
         return fbeta
     
@@ -800,11 +812,8 @@ class General:
         plt.show()
 
 
-    def OneHot_decode(labels):
-        w = list(set(labels))
-        w = len(w)
-        y = np.eye(w)[labels]
-        
+    def OneHot_decode(labels,n_classes):
+        y = np.eye(n_classes)[labels]
         return y
  
        

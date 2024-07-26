@@ -24,6 +24,7 @@ import ast
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
+
 class Utils:
     
 
@@ -227,7 +228,7 @@ class Utils:
             # Create the file and write the headers if it doesn't exist
             if not os.path.exists(self.file_path):
                 with open(self.file_path, 'w') as f:
-                    f.write('epoch,train_tp,train_fp,train_fn,train_tn,val_tp,val_fp,val_fn,val_tn,test_tp,test_fp,test_fn,test_tn\n')
+                    f.write('epoch,train_true,train_pred,val_true,val_pred\n')
     
         def on_epoch_end(self, epoch, logs=None):
             train_metrics = [None] * 4
@@ -236,33 +237,33 @@ class Utils:
             if self.train is not None:
                 print("Calculating metrics for train set...")
                 y_pred = self.model.predict(self.train[0])
-                train_metrics = [
-                    ml.General.true_positives(self.train[1], y_pred),
-                    ml.General.false_positives(self.train[1], y_pred),
-                    ml.General.false_negatives(self.train[1], y_pred),
-                    ml.General.true_negatives(self.train[1], y_pred)
-                ]
+                y_pred = np.argmax(y_pred,axis = 1).astype(int).tolist()
+                
+                y_true = np.argmax(self.train[1],axis = 1).astype(int).tolist()
+                
+                train_metrics = [y_true,y_pred]
                 del y_pred
+                del y_true
                 tf.keras.backend.clear_session()
                 gc.collect()
     
             if self.val is not None:
                 print("Calculating metrics for validation set...")
                 y_pred = self.model.predict(self.val[0])
-                val_metrics = [
-                    ml.General.true_positives(self.val[1], y_pred),
-                    ml.General.false_positives(self.val[1], y_pred),
-                    ml.General.false_negatives(self.val[1], y_pred),
-                    ml.General.true_negatives(self.val[1], y_pred)
-                ]
+                y_pred = np.argmax(y_pred,axis = 1).astype(int).tolist()
+                
+                y_true = np.argmax(self.val[1],axis = 1).astype(int).tolist()
+                
+                val_metrics = [y_true,y_pred]
                 del y_pred
+                del y_true
                 tf.keras.backend.clear_session()
                 gc.collect()
     
             # Append the metrics for this epoch to the CSV file
             with open(self.file_path, mode='a') as f:
-                f.write(f'{epoch},{train_metrics[0]},{train_metrics[1]},{train_metrics[2]},{train_metrics[3]},'
-                        f'{val_metrics[0]},{val_metrics[1]},{val_metrics[2]},{val_metrics[3]}\n')
+                f.write(f'{epoch},"{str(train_metrics[0])}","{str(train_metrics[1])}",'
+                        f'"{str(val_metrics[0])}","{str(val_metrics[1])}"\n')
     
             print("-----------------------------------------------------------------------")
             print("\n")
@@ -648,65 +649,114 @@ class Project:
                                   )
             ######################################################## 
             
-        def Analysis_plot(self, metrics_train, metrics_val, x_labels, plot_title, save_plots, show_plots):
-            fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(2*len(x_labels), 10))  # Two subplots, one above the other
+        def Analysis_plot(self, metrics_train, metrics_val, x_labels, plot_title, save_plots, show_plots,clean_title = False,maximum_y = None,round_data = True):
+            rows = 0
+            if metrics_train is not None:
+                create_train = True
+                rows+=1
+            else:
+                create_train = False
+            if metrics_val is not None:
+                create_val = True
+                rows+=1
+            else:
+                create_val = False
+            if not(metrics_train or metrics_val):
+                print("No data provided, skipping analysis plot...")
+                return
             
-            # Plot for training data
-            ax = axes[0]
-            x = np.arange(len(x_labels))  # the label locations
-            width = 0.13  # the width of the bars, reduced to make clusters tighter
-            multiplier = 0
-            min_y = 1
-            for attribute, value in metrics_train.items():
-                offset = width * multiplier
-                value = [round(v, 3) for v in value]
-                rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
-                labels = ax.bar_label(rects, padding=3)
-                for label in labels:
-                    label.set_fontsize('small')  # Set the fontsize here
-                multiplier += 1
-                if min_y > min(value):
-                    min_y = min(value)
+            if rows >1:
+                fig, axes = plt.subplots(nrows=rows, ncols=1, figsize=(2*len(x_labels), 10))  # Two subplots, one above the other
             
-            ax.set_ylabel('Value\n Range: [0-1]')
-            ax.set_title(plot_title + ' (Train)')
-            ax.set_xticks(x + width * (multiplier - 1) / 2)
-            ax.set_xticklabels(x_labels, fontsize=7)
-            ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
-            min_y = np.floor((min_y * 0.9) / 0.02) * 0.02
-            ax.set_ylim(min_y, 1)
-            ax.set_axisbelow(True)
-            ax.grid(color='gray', linestyle='dashed')
-
-            # Plot for validation data
-            ax = axes[1]
-            x = np.arange(len(x_labels))  # the label locations
-            width = 0.13  # the width of the bars, reduced to make clusters tighter
-            multiplier = 0
-            min_y = 1
-            for attribute, value in metrics_val.items():
-                offset = width * multiplier
-                value = [round(v, 3) for v in value]
-                rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
-                labels = ax.bar_label(rects, padding=3)
-                for label in labels:
-                    label.set_fontsize('small')  # Set the fontsize here
-                multiplier += 1
-                if min_y > min(value):
-                    min_y = min(value)
-
-            ax.set_ylabel('Value\n Range: [0-1]')
-            ax.set_title(plot_title + ' (Validation)')
-            ax.set_xticks(x + width * (multiplier - 1) / 2)
-            ax.set_xticklabels(x_labels, fontsize=7)
-            ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
-            min_y = np.floor((min_y * 0.9) / 0.02) * 0.02
-            ax.set_ylim(min_y, 1)
-            ax.set_axisbelow(True)
-            ax.grid(color='gray', linestyle='dashed')
+            else:
+                fig, axes = plt.subplots(figsize=(2*len(x_labels), 10))  # Two subplots, one above the other
             
-            # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
-            plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1, hspace=0.5)  # Adjust right to leave space for the legend, hspace for vertical space between plots
+            if create_train:
+                # Plot for training data
+                if create_val:
+                    ax = axes[0]
+                else:
+                    ax = axes
+                x = np.arange(len(x_labels))  # the label locations
+                width = 0.13  # the width of the bars, reduced to make clusters tighter
+                multiplier = 0
+                min_y = 1
+                max_y = 0
+                for attribute, value in metrics_train.items():
+                    offset = width * multiplier
+                    if round_data:
+                        value = [round(v, 3) for v in value]
+                    rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
+                    labels = ax.bar_label(rects, padding=3)
+                    for label in labels:
+                        label.set_fontsize('small')  # Set the fontsize here
+                    multiplier += 1
+                    if min_y > min(value):
+                        min_y = min(value)
+                    if max_y < max(value):
+                        max_y = max(value)
+                
+                ax.set_ylabel('Value\n Range: [0-1]')
+                if clean_title:
+                    ax.set_title(plot_title)
+                else:
+                    ax.set_title(plot_title + ' (Train)')
+                ax.set_xticks(x + width * (multiplier - 1) / 2)
+                ax.set_xticklabels(x_labels, fontsize=7)
+                ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
+                min_y = (min_y * 0.9)
+                max_y = (max_y * 1.1)
+                if maximum_y is not None:
+                    if maximum_y<max_y:
+                        max_y = maximum_y
+                ax.set_ylim(min_y, max_y)
+                ax.set_axisbelow(True)
+                ax.grid(color='gray', linestyle='dashed')
+                
+            if create_val:
+                # Plot for validation data
+                if create_train:
+                    ax = axes[1]
+                else:
+                    ax = axes
+                x = np.arange(len(x_labels))  # the label locations
+                width = 0.13  # the width of the bars, reduced to make clusters tighter
+                multiplier = 0
+                min_y = 1
+                max_y = 0
+                for attribute, value in metrics_val.items():
+                    offset = width * multiplier
+                    if round_data:
+                        value = [round(v, 3) for v in value]
+                    rects = ax.bar(x + offset, value, width, label=attribute, edgecolor='black')
+                    labels = ax.bar_label(rects, padding=3)
+                    for label in labels:
+                        label.set_fontsize('small')  # Set the fontsize here
+                    multiplier += 1
+                    if min_y > min(value):
+                        min_y = min(value)
+                    if max_y < max(value):
+                        max_y = max(value)
+    
+                ax.set_ylabel('Value\n Range: [0-1]')
+                if clean_title:
+                    ax.set_title(plot_title)
+                else:
+                    ax.set_title(plot_title + ' (Validation)')
+                ax.set_xticks(x + width * (multiplier - 1) / 2)
+                ax.set_xticklabels(x_labels, fontsize=7)
+                ax.legend(loc='upper left', ncols=1, fontsize='small', bbox_to_anchor=(1, 1))  # Position the legend outside the plot
+                min_y = (min_y * 0.9)
+                max_y = (max_y * 1.1)
+                if maximum_y is not None:
+                    if maximum_y<max_y:
+                        max_y = maximum_y
+                ax.set_ylim(min_y, max_y)
+                ax.set_axisbelow(True)
+                ax.grid(color='gray', linestyle='dashed')
+                
+                # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
+                plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1, hspace=0.5)  # Adjust right to leave space for the legend, hspace for vertical space between plots
 
             # Show the plot
             if show_plots:
@@ -945,28 +995,33 @@ class Project:
             train_models_high_level_metrics = {}
             val_models_high_level_metrics = {}
             for i in range(len(Data)):
+                n_classes = Data["N_classes"][i]
                 #Train data
                 train_y_true = Data["Train_y_true"][i]
                 train_y_pred = Data["Train_y_pred"][i]
                 
-                train_y_true = ml.General.OneHot_decode(train_y_true)
-                train_y_pred = ml.General.OneHot_decode(train_y_pred)
+                train_y_true = ml.General.OneHot_decode(train_y_true,n_classes)
+                train_y_pred = ml.General.OneHot_decode(train_y_pred,n_classes)
+
                 
                 train_metrics = ml.General.calculate_main_metrics(y_true_one_hot = train_y_true,
                                                                   y_pred_prob_one_hot = train_y_pred
                                                                   )
-                
+                #Calculating ROC metrics
                 train_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = train_y_true,
                                                                                     y_pred = train_y_pred
                                                                                     )
+                
                 train_models_high_level_metrics[Data["Model_ID"][i]] = train_metrics
+
+                
                 
                 #Val data
                 val_y_true = Data["Val_y_true"][i]
                 val_y_pred = Data["Val_y_pred"][i]
                 
-                val_y_true = ml.General.OneHot_decode(val_y_true)
-                val_y_pred = ml.General.OneHot_decode(val_y_pred)
+                val_y_true = ml.General.OneHot_decode(val_y_true,n_classes)
+                val_y_pred = ml.General.OneHot_decode(val_y_pred,n_classes)
                 
                 val_metrics = ml.General.calculate_main_metrics(y_true_one_hot = val_y_true,
                                                                   y_pred_prob_one_hot = val_y_pred
@@ -1001,7 +1056,13 @@ class Project:
             v_bal_acc = []
             v_ROC_AUC = []
             
+            overtrain = []
+            
             x_labels = []
+            
+            acc_ov = []
+            bal_acc_ov = []
+            f1_ov = []
             
             for model in folders:
                 #Train data
@@ -1029,6 +1090,17 @@ class Project:
                 
                 v_bal_acc.append(val_models_high_level_metrics[model]['balanced_accuracy'])
                 v_ROC_AUC.append(val_models_high_level_metrics[model]['ROC_scores'][0])
+                
+                #Overtraining_data
+                acc_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['accuracy'], val_models_high_level_metrics[model]['accuracy']))
+                bal_acc_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['balanced_accuracy'], val_models_high_level_metrics[model]['balanced_accuracy']))
+                f1_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['f1_score'], val_models_high_level_metrics[model]['f1_score']))
+               
+                
+                #harmonic_ov_mean = (2*acc_ov*bal_acc_ov*f1_ov) / (acc_ov+bal_acc_ov+f1_ov+1e-20)
+                
+                
+                #overtrain.append(harmonic_ov_mean)
 
 
 
@@ -1057,7 +1129,12 @@ class Project:
                 loss = str(Data["Loss_type"][idx])
                 Train_label = "Opt:"+Opt+" B_size: "+bs +"\nLoss: "+loss
                 
-                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label
+                Epochs_trained = str(Data["Epochs_trained"][idx])
+                Epochs_best = str(Data["Epochs_toBest"][idx])
+                
+                Epochs_label = 'Epochs best/trained: '+Epochs_best+"/"+Epochs_trained
+                
+                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label+"\n"+Epochs_label
 
                 x_labels.append(Plot_label)
                 
@@ -1098,27 +1175,89 @@ class Project:
                 'Balanced_accuracy': v_bal_acc,
                 'ROC_AUC': v_ROC_AUC,
             }
+            
+            Overtrain_metrics = {
+                'Accuracy overtrain': acc_ov,
+                'Balanced accuracy overtrain': bal_acc_ov,
+                'F1 score overtrain': f1_ov
+            }
 
             self.Analysis_plot(metrics_train = t_models_basic_metrics,
                                metrics_val = v_models_basic_metrics,
                                x_labels = x_labels,
                                plot_title = "Basic metrics",
                                save_plots = save_plots,
-                               show_plots =show_plots)
+                               show_plots =show_plots,
+                               maximum_y = 1)
             
             self.Analysis_plot(metrics_train = t_models_f_scores,
                                metrics_val = v_models_f_scores,
                                x_labels = x_labels,
                                plot_title = "F scores",
                                save_plots = save_plots,
-                               show_plots =show_plots)
+                               show_plots =show_plots,
+                               maximum_y = 1)
             
             self.Analysis_plot(metrics_train = t_Balanced_metrics,
                                metrics_val = v_Balanced_metrics,
                                x_labels = x_labels,
                                plot_title = "Inbalance resistant metrics",
                                save_plots = save_plots,
-                               show_plots =show_plots)
+                               show_plots =show_plots,
+                               maximum_y = 1)
+            
+            self.Analysis_plot(metrics_train = Overtrain_metrics,
+                               metrics_val = None,
+                               x_labels = x_labels,
+                               plot_title = "Another model metrics",
+                               save_plots = save_plots,
+                               show_plots =show_plots,
+                               clean_title = True,
+                               round_data = False)
+            
+            
+            ####################################
+            #Analysis metrics over training
+            """
+            metrics_comparision = {}
+            for i in range(len(Data)):
+                model_metrics = {}
+                accuracy = []
+                path = os.path.join(self.PROJECT_DIRECTORY,'Models_saved', Data["Model_ID"][i],"Model_metrics.csv")
+                metrics = pd.read_csv(path,converters={   'train_true': pd.eval,
+                                                          'train_pred': pd.eval,
+                                                          'val_true': pd.eval,
+                                                          'val_pred': pd.eval
+                                                          })
+                
+
+
+                
+                for k in range(len(metrics)):
+                    train_true = metrics["train_true"][k]
+                    n_classes = max(train_true)+1
+                    train_true = ml.General.OneHot_decode(train_true,n_classes)
+                    train_pred = metrics["train_pred"][k]
+                    train_pred = ml.General.OneHot_decode(train_pred,n_classes)
+                    
+                    val_true = metrics["val_true"][k]
+                    val_true = ml.General.OneHot_decode(val_true,n_classes)
+                    val_pred = metrics["val_pred"][k]
+                    val_pred = ml.General.OneHot_decode(val_pred,n_classes)
+                    
+                    calc_metrics = ml.General.calculate_main_metrics(train_true, train_pred)
+                    accuracy.append(calc_metrics["accuracy"])
+               
+                    
+                model_metrics["Accuracy"] = accuracy
+                metrics_comparision[Data["Model_ID"][i]] = model_metrics     
+               
+                
+            plt.figure()
+            for i in range(len(Data)):
+                plt.plot(metrics_comparision[Data["Model_ID"][i]]["Accuracy"])
+
+            """
             
             
             
