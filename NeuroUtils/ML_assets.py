@@ -771,7 +771,7 @@ class General:
         plt.style.use('default') 
 
 
-    def Conf_matrix_classification(y_test, y_pred, dictionary, normalize=False):
+    def Conf_matrix_classification(y_test, y_pred, dictionary, title, normalize=False):
         """
         This function prints and plots the confusion matrix.
         Normalization can be applied by setting `normalize=True`.
@@ -794,7 +794,8 @@ class General:
         
         
         plt.imshow(cm, interpolation='nearest', cmap="BuGn")
-        plt.title("Confusion matrix")
+        title = "Confusion matrix - "+title
+        plt.title(title)
         plt.colorbar()
         tick_marks = np.arange(len(classes))
         plt.xticks(tick_marks, classes, rotation=45)

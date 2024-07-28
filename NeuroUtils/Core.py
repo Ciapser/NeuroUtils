@@ -20,7 +20,7 @@ import cv2
 import json
 import gc
 import ast
-
+from scipy.signal import savgol_filter
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
@@ -346,7 +346,7 @@ class Utils:
     
 
        
-    def Initialize_Results(model,model_directory, dictionary,evaluate, x_train = None ,y_train = None ,x_val = None , y_val = None , x_test = None , y_test = None):    
+    def Initialize_Results(model,model_directory, dictionary,evaluate, x_train = None ,y_train = None ,x_val = None , y_val = None , x_test = None , y_test = None,show_plots = False,save_plots = True):    
         #!!! Model results
         #########################################################################
         #########################################################################
@@ -355,29 +355,74 @@ class Utils:
         model_history_directory = os.path.join(model_directory , "Model_history.csv")
         Model_history = pd.read_csv(model_history_directory)
         ml.General.Model_training_history_plot_CSV(Model_history)
-        
+        if save_plots:
+            file_name = "Overall train history.png"
+            plot_path = os.path.join(model_directory,file_name)
+            plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+
+        if not show_plots:
+            plt.close()
         
         try:
             #Create confusion matrix
             #Predict classes
-            print("\nPredicting classes based on test set...")
-            y_pred = model.predict(x_test)
+            print("\nPredicting classes based on train set...")
+            plot_title = "Train"
+            y_pred = model.predict(x_train)
             
             plt.figure()
-            ml.General.Conf_matrix_classification(y_test  ,y_pred , dictionary , normalize = True)
-        except:
-            print("No test set provided, skipping...")
+            ml.General.Conf_matrix_classification(y_train ,y_pred , dictionary, plot_title, normalize = True)
             
+            if save_plots:
+                file_name = "Conf_matrix "+plot_title + ".png"
+                plot_path = os.path.join(model_directory,file_name)
+                plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+
+            if not show_plots:
+                plt.close()
+                
+        except:
+            print("No train set provided, skipping...")
+                   
         try:
             #Create confusion matrix
             #Predict classes
             print("\nPredicting classes based on validation set...")
+            plot_title = "Validation"
             y_pred = model.predict(x_val)
             
             plt.figure()
-            ml.General.Conf_matrix_classification(y_val ,y_pred , dictionary , normalize = True)
+            ml.General.Conf_matrix_classification(y_val ,y_pred , dictionary, plot_title, normalize = True)
+            
+            if save_plots:
+                file_name = "Conf_matrix "+plot_title + ".png"
+                plot_path = os.path.join(model_directory,file_name)
+                plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+
+            if not show_plots:
+                plt.close()
         except:
             print("No validation set provided, skipping...")    
+            
+        try:
+            #Create confusion matrix
+            #Predict classes
+            print("\nPredicting classes based on test set...")
+            plot_title = "Test"
+            y_pred = model.predict(x_test)
+            
+            plt.figure()
+            ml.General.Conf_matrix_classification(y_test ,y_pred , dictionary, plot_title, normalize = True)
+            
+            if save_plots:
+                file_name = "Conf_matrix "+plot_title + ".png"
+                plot_path = os.path.join(model_directory,file_name)
+                plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+
+            if not show_plots:
+                plt.close()
+        except:
+            print("No test set provided, skipping...")
         
     
         if evaluate:
@@ -633,7 +678,7 @@ class Project:
             return self.MODEL
             ########################################################
     
-        def Initialize_results(self,Evaluate = False):
+        def Initialize_results(self,show_plots = False,save_plots = True,Evaluate = False):
             #6
             ########################################################
             Utils.Initialize_Results(self.MODEL,
@@ -645,7 +690,9 @@ class Project:
                                   self.X_VAL,
                                   self.Y_VAL,
                                   self.X_TEST,
-                                  self.Y_TEST
+                                  self.Y_TEST,
+                                  show_plots,
+                                  save_plots
                                   )
             ######################################################## 
             
@@ -768,10 +815,108 @@ class Project:
 
             if not show_plots:
                 plt.close()
-            ##########################################################################################            
+            ##########################################################################################    
+        def Analysis_over_train(self,models_metric, val_models_metric, x_labels, plot_title, 
+                                                 show_plots, save_plots, 
+                                                 window_length=20, polyorder=2,min_y = 0,max_y = 1):
+            """
+            Plot smoothed training and validation accuracy for multiple models and highlight the maximum value.
+        
+            Parameters:
+            - models_metric: list of np.ndarray, List of training metric arrays from different models.
+            - val_models_metric: list of np.ndarray, List of validation metric arrays from different models.
+            - x_labels: list of str, Labels for each model to use in the legend.
+            - plot_title: str, Title of the plot.
+            - show_plots: bool, Whether to display the plots.
+            - save_plots: bool, Whether to save the plots.
+            - train_window_length: int, Window length for the Savitzky-Golay filter for training data (must be odd).
+            - train_polyorder: int, Polynomial order for the Savitzky-Golay filter for training data.
+            - val_window_length: int, Window length for the Savitzky-Golay filter for validation data (must be odd).
+            - val_polyorder: int, Polynomial order for the Savitzky-Golay filter for validation data.
+            """
+            
+            num_models = len(models_metric)
+            colors = plt.cm.viridis(np.linspace(0, 1, num_models))  # Generate distinct colors for each model
+        
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 14), sharex=True)
+            
+            for i, (train_acc, val_acc) in enumerate(zip(models_metric, val_models_metric)):
+                epochs = np.arange(0, len(train_acc))
+                
+                # Adjust window length if it is larger than the number of data points for training data
+                if window_length >= len(train_acc):
+                    window_length = len(train_acc) if len(train_acc) % 2 != 0 else len(train_acc) - 1
+                
+                # Adjust window length if it is larger than the number of data points for validation data
+                if window_length >= len(val_acc):
+                    window_length = len(val_acc) if len(val_acc) % 2 != 0 else len(val_acc) - 1
+                
+                # Smoothing the training data using Savitzky-Golay filter
+                train_acc_smoothed = savgol_filter(train_acc, window_length=window_length, polyorder=polyorder)
+                
+                # Smoothing the validation data using Savitzky-Golay filter
+                val_acc_smoothed = savgol_filter(val_acc, window_length=window_length, polyorder=polyorder)
+                
+                # Find the maximum value and its epoch for training data
+                max_train_val = np.max(train_acc)
+                max_train_epoch = np.argmax(train_acc) 
+                smoothed_train_val_at_max = train_acc_smoothed[max_train_epoch ]
+                
+                # Find the maximum value and its epoch for validation data
+                max_val_val = np.max(val_acc)
+                max_val_epoch = np.argmax(val_acc) 
+                smoothed_val_val_at_max = val_acc_smoothed[max_val_epoch]
+                
+                # Plot smoothed training data
+                ax1.plot(epochs, train_acc_smoothed, color=colors[i])
+                
+                # Highlight the maximum value for training data
+                ax1.scatter(max_train_epoch, max_train_val, color=colors[i], zorder=5)
+                ax1.plot([max_train_epoch, max_train_epoch], [smoothed_train_val_at_max, max_train_val], color=colors[i], linestyle='-')
+                
+                # Plot smoothed validation data
+                ax2.plot(epochs, val_acc_smoothed, color=colors[i])
+                
+                # Highlight the maximum value for validation data
+                ax2.scatter(max_val_epoch, max_val_val, color=colors[i], zorder=5)
+                ax2.plot([max_val_epoch, max_val_epoch], [smoothed_val_val_at_max, max_val_val], color=colors[i], linestyle='-')
+        
+                # Add the marker to the legend with label
+                ax1.scatter([], [], color=colors[i], label=x_labels[i], marker='s')
+                ax2.scatter([], [], color=colors[i], label=x_labels[i], marker='s')
             
             
-        def Models_analysis(self,models_directory = "Models_saved", save_plots = True, show_plots = True):
+            
+            # Labels and legend for training plot
+            ax1.set_title(plot_title + ' - Training')
+            ax1.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            ax1.grid(True)
+            ax1.set_ylim(min_y, max_y)
+            ax1.set_xlabel('Epochs')
+            
+            # Labels and legend for validation plot
+            ax2.set_title(plot_title + ' - Validation')
+            ax2.grid(True)
+            ax2.set_ylim(min_y, max_y)
+            ax2.set_xlabel('Epochs')
+            
+
+            # Adjust subplot parameters to reduce whitespace and ensure the legend is fully visible
+            plt.subplots_adjust(left=0.1, right=0.85, top=0.9, bottom=0.1, hspace=0.5)  # Adjust right to leave space for the legend, hspace for vertical space between plots
+        
+            # Show the plot
+            if show_plots:
+                plt.show()
+            if save_plots:
+                file_name = plot_title + ".png"
+                basic_metrics_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis", file_name)
+                fig.savefig(basic_metrics_path, bbox_inches='tight', dpi=300)
+        
+            if not show_plots:
+                plt.close()
+            
+            
+        def Models_analysis(self,models_directory = "Models_saved", save_plots = True, show_plots = False):
             print("----------------------------------------------------------------------------")
             print("Starting trained models analysis...")
             
@@ -1056,13 +1201,11 @@ class Project:
             v_bal_acc = []
             v_ROC_AUC = []
             
-            overtrain = []
+            harmonic_ov = []
             
             x_labels = []
             
-            acc_ov = []
-            bal_acc_ov = []
-            f1_ov = []
+
             
             for model in folders:
                 #Train data
@@ -1092,15 +1235,16 @@ class Project:
                 v_ROC_AUC.append(val_models_high_level_metrics[model]['ROC_scores'][0])
                 
                 #Overtraining_data
-                acc_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['accuracy'], val_models_high_level_metrics[model]['accuracy']))
-                bal_acc_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['balanced_accuracy'], val_models_high_level_metrics[model]['balanced_accuracy']))
-                f1_ov.append(ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['f1_score'], val_models_high_level_metrics[model]['f1_score']))
+                acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['accuracy'], val_models_high_level_metrics[model]['accuracy']))
+                bal_acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['balanced_accuracy'], val_models_high_level_metrics[model]['balanced_accuracy']))
+                f1_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['f1_score'], val_models_high_level_metrics[model]['f1_score']))
                
+                harmonic_ov_mean = np.array([acc_ov,bal_acc_ov,f1_ov])
                 
-                #harmonic_ov_mean = (2*acc_ov*bal_acc_ov*f1_ov) / (acc_ov+bal_acc_ov+f1_ov+1e-20)
+                harmonic_ov_mean = len(harmonic_ov_mean) / np.sum(1/harmonic_ov_mean)
                 
                 
-                #overtrain.append(harmonic_ov_mean)
+                harmonic_ov.append(harmonic_ov_mean)
 
 
 
@@ -1134,7 +1278,9 @@ class Project:
                 
                 Epochs_label = 'Epochs best/trained: '+Epochs_best+"/"+Epochs_trained
                 
-                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label+"\n"+Epochs_label
+                ID_label = "Short ID: "+model[0:5]
+                
+                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label+"\n"+Epochs_label+"\n"+ID_label
 
                 x_labels.append(Plot_label)
                 
@@ -1176,10 +1322,9 @@ class Project:
                 'ROC_AUC': v_ROC_AUC,
             }
             
-            Overtrain_metrics = {
-                'Accuracy overtrain': acc_ov,
-                'Balanced accuracy overtrain': bal_acc_ov,
-                'F1 score overtrain': f1_ov
+            Another_metrics = {
+                'Harmonic_overtrain': harmonic_ov
+
             }
 
             self.Analysis_plot(metrics_train = t_models_basic_metrics,
@@ -1206,10 +1351,10 @@ class Project:
                                show_plots =show_plots,
                                maximum_y = 1)
             
-            self.Analysis_plot(metrics_train = Overtrain_metrics,
+            self.Analysis_plot(metrics_train = Another_metrics,
                                metrics_val = None,
                                x_labels = x_labels,
-                               plot_title = "Another model metrics",
+                               plot_title = "Other model metrics",
                                save_plots = save_plots,
                                show_plots =show_plots,
                                clean_title = True,
@@ -1218,69 +1363,313 @@ class Project:
             
             ####################################
             #Analysis metrics over training
-            """
-            metrics_comparision = {}
-            for i in range(len(Data)):
-                model_metrics = {}
-                accuracy = []
-                path = os.path.join(self.PROJECT_DIRECTORY,'Models_saved', Data["Model_ID"][i],"Model_metrics.csv")
-                metrics = pd.read_csv(path,converters={   'train_true': pd.eval,
-                                                          'train_pred': pd.eval,
-                                                          'val_true': pd.eval,
-                                                          'val_pred': pd.eval
-                                                          })
-                
+            print("\n\n")
+            print("Training history analysis...")
+
+            Train_history_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Train_history_Data.feather")
+            #Create dataframe with analysys if it does not exists yet
+            if not os.path.isfile(Train_history_path):
+                c = ['Model_ID',
+                     'train_accuracy',
+                     'train_precision',
+                     'train_recall',
+                     'train_f1_score',
+                     'train_f2_score',
+                     'train_f0_5_score',
+                     'train_specificity',
+                     'train_balanced_accuracy',
+                     'train_roc_auc',
+                     
+                     'val_accuracy',
+                     'val_precision',
+                     'val_recall',
+                     'val_f1_score',
+                     'val_f2_score',
+                     'val_f0_5_score',
+                     'val_specificity',
+                     'val_balanced_accuracy',
+                     'val_roc_auc',
+                     
+                     ]
+                Train_history_Data = pd.DataFrame(columns = c)
+            else:
+                Train_history_Data = pd.read_feather(Train_history_path)
+
+            #return Train_history_Data
+            #Determine if this model is already present in the data
+            for model in folders:
+                print("----------------------------------------------------------------------------")
+                print("Model: ",model)
+                Model_history = pd.read_csv(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_history.csv"))
+                if Train_history_Data["Model_ID"].isin([model]).any():
+                    print("Model present in Data")
+                    #To update if epochs has been changed
+                    model_epoch = Model_history["epoch"].iloc[-1]
+                    idx = Train_history_Data['Model_ID'].eq(model).argmax()
+                    analysis_epoch = len(Train_history_Data["train_accuracy"][idx])-1
+                    
+                    if model_epoch>analysis_epoch:
+                        fill_data = True
+                        print("Model has been trained during last analysis, updating...")
+                    else:
+                        fill_data = False
+                        print("Data is up to date, skipping...")
+      
+                else:
+                    fill_data = True
+                    print("Model has not been processed yet, starting analysis")
+            
+            
 
 
-                
-                for k in range(len(metrics)):
-                    train_true = metrics["train_true"][k]
-                    n_classes = max(train_true)+1
-                    train_true = ml.General.OneHot_decode(train_true,n_classes)
-                    train_pred = metrics["train_pred"][k]
-                    train_pred = ml.General.OneHot_decode(train_pred,n_classes)
+                if fill_data:
+
+                    metric_path = os.path.join(self.PROJECT_DIRECTORY,'Models_saved',model ,"Model_metrics.csv")
+                    model_metrics = pd.read_csv(metric_path)
                     
-                    val_true = metrics["val_true"][k]
-                    val_true = ml.General.OneHot_decode(val_true,n_classes)
-                    val_pred = metrics["val_pred"][k]
-                    val_pred = ml.General.OneHot_decode(val_pred,n_classes)
+                    for col in model_metrics.columns:
+                        if col != "epoch":
+                            model_metrics[col] = model_metrics[col].apply(ast.literal_eval)   
+
+
                     
-                    calc_metrics = ml.General.calculate_main_metrics(train_true, train_pred)
-                    accuracy.append(calc_metrics["accuracy"])
+                    train_accuracy = []
+                    train_precision = []
+                    train_recall = []
+                    train_f1_score = []
+                    train_f0_5_score = []
+                    train_f2_score = []
+                    train_specificity = []
+                    train_balanced_accuracy = []
+                    train_roc_auc = []
+                    
+                    val_accuracy = []
+                    val_precision = []
+                    val_recall = []
+                    val_f1_score = []
+                    val_f0_5_score = []
+                    val_f2_score = []
+                    val_specificity = []
+                    val_balanced_accuracy = []
+                    val_roc_auc = []
+                    #Train 
+                    for k in tqdm(range(len(model_metrics))):
+                        
+                        train_true = model_metrics['train_true'][k]
+                        train_pred = model_metrics['train_pred'][k]
+                        
+                        train_true = ml.General.OneHot_decode(train_true, self.N_CLASSES)
+                        train_pred = ml.General.OneHot_decode(train_pred, self.N_CLASSES)
+                        
+                        train_calc_metrics = ml.General.calculate_main_metrics(train_true, train_pred)
+
+                        train_accuracy.append(train_calc_metrics["accuracy"])
+                        train_precision.append(train_calc_metrics["precision"])
+                        train_recall.append(train_calc_metrics["recall"])
+                        train_f1_score.append(train_calc_metrics["f1_score"])
+                        train_f0_5_score.append(train_calc_metrics["f0_5_score"])
+                        train_f2_score.append(train_calc_metrics["f2_score"])
+                        train_specificity.append(train_calc_metrics["specificity"])
+                        train_balanced_accuracy.append(train_calc_metrics["balanced_accuracy"])
+                        train_roc_auc.append(ml.General.compute_multiclass_roc_auc(train_true, train_pred)[0])
+                        
+
+                        
+                    #Validation
+                    for k in tqdm(range(len(model_metrics))):
+                        val_true = model_metrics['val_true'][k]
+                        val_pred = model_metrics['val_pred'][k]
+                        
+                        val_true = ml.General.OneHot_decode(val_true, self.N_CLASSES)
+                        val_pred = ml.General.OneHot_decode(val_pred, self.N_CLASSES)
+                        
+                        val_calc_metrics = ml.General.calculate_main_metrics(val_true, val_pred)
+
+                        val_accuracy.append(val_calc_metrics["accuracy"])
+                        val_precision.append(val_calc_metrics["precision"])
+                        val_recall.append(val_calc_metrics["recall"])
+                        val_f1_score.append(val_calc_metrics["f1_score"])
+                        val_f0_5_score.append(val_calc_metrics["f0_5_score"])
+                        val_f2_score.append(val_calc_metrics["f2_score"])
+                        val_specificity.append(val_calc_metrics["specificity"])
+                        val_balanced_accuracy.append(val_calc_metrics["balanced_accuracy"])
+                        val_roc_auc.append(ml.General.compute_multiclass_roc_auc(val_true, val_pred)[0])
                
                     
-                model_metrics["Accuracy"] = accuracy
-                metrics_comparision[Data["Model_ID"][i]] = model_metrics     
+                    if os.path.isfile(Train_history_path):       
+                        try:
+                            #Such model is present and its saved in the same row
+                            idx = int(Train_history_Data.index[Train_history_Data['Model_ID']==model].tolist()[0])
+                            
+                        except:
+                            #Such model is not present yet and is saved in the new row
+                            idx = len(Train_history_Data['Model_ID'])
+                            
+                    else:
+                        print("Data analysis file is not present yet, crating one...")
+                        idx = 0  
+                        
+                    row_list =  [model,
+                                train_accuracy,
+                                train_precision,
+                                train_recall,
+                                train_f1_score,
+                                train_f2_score,
+                                train_f0_5_score,
+                                train_specificity,
+                                train_balanced_accuracy,
+                                train_roc_auc,
+                                
+                                val_accuracy,
+                                val_precision,
+                                val_recall,
+                                val_f1_score,
+                                val_f2_score,
+                                val_f0_5_score,
+                                val_specificity,
+                                val_balanced_accuracy,
+                                val_roc_auc,
+                                ]
+
+                    Train_history_Data.loc[idx] = row_list
+                    
+                    Train_history_Data.to_feather(Train_history_path)    
+                 
+            #Converting strings to actuall lists in the data
+            Train_history_Data = pd.read_feather(Train_history_path)    
+            
+
+
+
+            train_acc = []
+            train_prec = []
+            train_recall = []
+            train_f1_score = []
+            train_specificity = []
+            train_balanced_accuracy = []
+            train_roc_auc = []
+            
+            val_acc = []
+            val_prec = []
+            val_recall = []
+            val_f1_score = []
+            val_specificity = []
+            val_balanced_accuracy = []
+            val_roc_auc = []
+
+            
+            x_labels = []
+            #return Train_history_Data
+            for i in range(len(Train_history_Data)):
+                train_acc.append(Train_history_Data['train_accuracy'][i])
+                val_acc.append(Train_history_Data['val_accuracy'][i])
+                
+                train_prec.append(Train_history_Data['train_precision'][i])
+                val_prec.append(Train_history_Data['val_precision'][i])
+                
+                train_recall.append(Train_history_Data['train_recall'][i])
+                val_recall.append(Train_history_Data['val_recall'][i])
+                
+                train_f1_score.append(Train_history_Data['train_f1_score'][i])
+                val_f1_score.append(Train_history_Data['val_f1_score'][i])
+                
+                train_specificity.append(Train_history_Data['train_specificity'][i])
+                val_specificity.append(Train_history_Data['val_specificity'][i])
+                
+                train_balanced_accuracy.append(Train_history_Data['train_balanced_accuracy'][i])
+                val_balanced_accuracy.append(Train_history_Data['val_balanced_accuracy'][i])
+                
+                train_roc_auc.append(Train_history_Data['train_roc_auc'][i])
+                val_roc_auc.append(Train_history_Data['val_roc_auc'][i])
+
+
+                #Model plot display name
+                idx = int(Data.index[Data['Model_ID']==Train_history_Data["Model_ID"][i]].tolist()[0])
+                
+                Name_label = Data["Model_WorkName"][idx]
+                
+                Model_label = Data["Model_Parameters"][idx]
+                Model_Dtype = Data["Model_Dtype"][idx]
+                if len(str(Model_label)) >3 and len(str(Model_label))<6:
+                    Model_label = str(round(Model_label/1e3,1))+ "K_"+Model_Dtype
+                elif len(str(Model_label)) >=6:
+                    Model_label = str(round(Model_label/1e6,1))+ "M_"+Model_Dtype
+                    
+                
+                Img_H = Data["Img_H"][idx]
+                Img_W = Data["Img_W"][idx]
+                Img_Dtype = Data["Img_Dtype"][idx]
+                Img_Form = Data["Form"][idx]
+                
+                Img_label = str(Img_H) +"x"+ str(Img_W)+ " "+Img_Form+"_"+Img_Dtype
+                
+                bs = str(Data["Batch_size"][idx])
+                Opt = ast.literal_eval(Data["Optimizer_data"][idx])['name']
+                loss = str(Data["Loss_type"][idx])
+                Train_label = "Opt:"+Opt+" B_size: "+bs +"\nLoss: "+loss
+                
+                Epochs_trained = str(Data["Epochs_trained"][idx])
+                Epochs_best = str(Data["Epochs_toBest"][idx])
+                
+                Epochs_label = 'Epochs best/trained: '+Epochs_best+"/"+Epochs_trained
+                
+                ID_label = "Short ID: "+Data["Model_ID"][idx][0:5]
+                
+                Plot_label = Name_label+" "+Model_label+"\n"+Img_label+"\n"+Train_label+"\n"+Epochs_label+"\n"+ID_label
+
+                x_labels.append(Plot_label)
                
                 
-            plt.figure()
-            for i in range(len(Data)):
-                plt.plot(metrics_comparision[Data["Model_ID"][i]]["Accuracy"])
-
-            """
-            
-            
-            
-
-
                 
-
-            
+                plot_train_merged_metrics = [train_acc,
+                                             train_prec,
+                                             train_recall,
+                                             train_f1_score,
+                                             train_specificity,
+                                             train_balanced_accuracy,
+                                             train_roc_auc]
+                
+                plot_val_merged_metrics = [val_acc,
+                                             val_prec,
+                                             val_recall,
+                                             val_f1_score,
+                                             val_specificity,
+                                             val_balanced_accuracy,
+                                             val_roc_auc]
+                merged_titles =             ["Accuracy",
+                                             "Precision",
+                                             "Recall",
+                                             "F1 Score",
+                                             "Specificity",
+                                             "Balanced_accuracy",
+                                             "ROC_AUC"]
+                
+            for j in range(len(plot_train_merged_metrics)):      
+                mn_y =0             
+                if merged_titles[j] == "Specificity":
+                    mn_y = 1-(1/self.N_CLASSES)
+                if merged_titles[j] == "ROC_AUC":
+                    mn_y = 0.5
         
+                self.Analysis_over_train(models_metric =plot_train_merged_metrics[j],
+                                         val_models_metric = plot_val_merged_metrics[j],
+                                         x_labels = x_labels,
+                                         plot_title = merged_titles[j],
+                                         show_plots = show_plots,
+                                         save_plots = save_plots,
+                                         min_y = mn_y
+                                         )
             
-        
             
-                
-                
-                
+            
             
 
-                
 
-            
-            
+
         
-            
+       
+        
+       
         def Generate_sample_submission(self, filepath = None):
             if filepath is None:
                 sample_submission = pd.read_csv(os.path.join(self.DATA_DIRECTORY , "sample_submission.csv")) 
