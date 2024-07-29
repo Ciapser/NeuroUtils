@@ -449,47 +449,16 @@ class Utils:
 
 class Project:
     class Classification_Project:
-        def  __init__(self,config):
-            #Low level constants
+        def  __init__(self,Database_Directory):
             self.PROJECT_DIRECTORY = os.path.dirname(os.path.abspath(sys.argv[0]))
-            #Initial
-            self.DATABASE_DIRECTORY = config.Initial_params["DataBase_directory"]
-            self.CREATE_TEST_SET = config.Initial_params["Create_Test_set"]
-            self.CSV_LOAD = config.Initial_params["Load_from_CSV"]
-            self.IMG_H = config.Initial_params["img_H"]
-            self.IMG_W = config.Initial_params["img_W"]
-            self.GRAYSCALE= config.Initial_params["grayscale"]
-            self.DATA_TYPE = config.Initial_params["DataType"]
+            self.DATABASE_DIRECTORY = Database_Directory
             
-            #Augment
-            self.REDUCED_SET_SIZE = config.Augment_params["reduced_set_size"]
-            self.DATASET_MULTIPLIER = config.Augment_params["dataset_multiplier"]
-            self.FLIPROTATE = config.Augment_params["flipRotate"]
-            self.RANDBRIGHT = config.Augment_params["randBright"]
-            self.GAUSSIAN = config.Augment_params["gaussian_noise"]
-            self.DENOISE = config.Augment_params["denoise"]
-            self.CONTOUR = config.Augment_params["contour"]
-            
-            #Model
-            self.ARCHITECTURE_NAME = config.Model_parameters["architecture_name"]
-            self.EPOCHS = config.Model_parameters["epochs"]
-            self.BATCH_SIZE = config.Model_parameters["batch_size"]
+            """
 
+            #Model
             
-            #High level constants
-            #Form
-            self.FORM = "Grayscale" if self.GRAYSCALE else "RGB"
-            #Channels
-            self.CHANNELS = 3 if self.FORM == "RGB" else 1
-            self.CHANNELS = self.CHANNELS+1 if self.CONTOUR else self.CHANNELS
-    
-            cr = 0 if self.REDUCED_SET_SIZE is None else self.REDUCED_SET_SIZE
-            self.PARAM_MARK = "_m"+str(self.DATASET_MULTIPLIER)+"_cr"+str(cr)+"_"+ "_".join(["1" if x else "0" for x in [self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR]])
-    
-                    
-            self.DATA_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
-            self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
-            
+
+            """
             
             
             
@@ -498,25 +467,60 @@ class Project:
             return "NO DESCRIPTION"
             
     
-        def Initialize_data(self): 
+        def Initialize_data(self,Img_Height,Img_Width,Grayscale = False,CSV_Load = False): 
+            self.IMG_H = Img_Height
+            self.IMG_W = Img_Width
+            self.GRAYSCALE = Grayscale
+            
+            self.CSV_LOAD = CSV_Load
+            
+            self.FORM = "Grayscale" if self.GRAYSCALE else "RGB"
+            self.CHANNELS = 3 if self.FORM == "RGB" else 1
+            
+            self.DATA_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM))
+            
             """Initializing dataset from main database folder with photos to project folder in numpy format. Photos are 
             Resized and cropped without loosing much aspect ratio, r parameter decides above what proportions of edges 
             image will be cropped to square instead of squeezed""" 
             
             Utils.Initialize_data(self.DATABASE_DIRECTORY, self.DATA_DIRECTORY, self.IMG_H, self.IMG_W, self.GRAYSCALE , self.CSV_LOAD)
             ########################################################
-        def Load_and_merge_data(self):
+        def Load_and_merge_data(self,Reduced_class_size = None):
             """Loading dataset to memory from data directory in project folder, sets can be reduced to equal size
             to eliminate disproportions if they are not same size at the main database
             In this module dictionary with names of classes is created as well, names are based on names of datsets
             Datasets names are based on the folder names in main database folder"""
+            
+            self.REDUCED_SET_SIZE = Reduced_class_size
             
             X, Y, DICTIONARY = ml.DataSets.Load_And_Merge_DataSet(self.DATA_DIRECTORY , self.REDUCED_SET_SIZE )
             
             return X, Y, DICTIONARY
             ########################################################
             
-        def Process_data(self,X,Y):
+        def Process_data(self,X,Y,Create_test_set = False,DataSet_multiplier = 1,DataType = "float32",FlipRotate = False,
+                                                                                                      RandBright = False,
+                                                                                                      Gaussian_noise = False,
+                                                                                                      Denoise = False,
+                                                                                                      Contour = False):
+            
+            self.CREATE_TEST_SET = Create_test_set
+            self.DATASET_MULTIPLIER = DataSet_multiplier
+            self.DATA_TYPE = DataType
+            
+            self.FLIPROTATE = FlipRotate
+            self.RANDBRIGHT = RandBright
+            self.GAUSSIAN = Gaussian_noise
+            self.DENOISE = Denoise
+            self.CONTOUR = Contour
+            
+            self.CHANNELS = self.CHANNELS+1 if self.CONTOUR else self.CHANNELS
+            
+            cr = 0 if self.REDUCED_SET_SIZE is None else self.REDUCED_SET_SIZE
+            self.PARAM_MARK = "_m"+str(self.DATASET_MULTIPLIER)+"_cr"+str(cr)+"_"+ "_".join(["1" if x else "0" for x in [self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR]])
+            self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
+            
+            
             #3
             ########################################################
             if not self.CREATE_TEST_SET:
@@ -600,7 +604,12 @@ class Project:
             
     
     
-        def Initialize_weights_and_training(self, Model, Train = True, Patience = 10, Min_delta_to_save = 0.1, Device = "CPU", add_config_info = None):
+        def Initialize_weights_and_training(self, Model, Architecture_name, Epochs, Batch_size, Train = True, Patience = 10, Min_delta_to_save = 0.1, Device = "CPU", add_config_info = None):
+            self.ARCHITECTURE_NAME = Architecture_name
+            self.EPOCHS = Epochs
+            self.BATCH_SIZE = Batch_size
+            
+            
             #5
             ########################################################
             #Create data for parameters file
@@ -810,7 +819,10 @@ class Project:
                 plt.show()
             if save_plots:
                 file_name = plot_title + ".png"
-                basic_metrics_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis", file_name)
+                performance_plots_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Performance_plots")
+                if not os.path.isdir(performance_plots_path):
+                    os.makedirs(performance_plots_path)
+                basic_metrics_path = os.path.join(performance_plots_path, file_name)
                 fig.savefig(basic_metrics_path, bbox_inches='tight', dpi=300)
 
             if not show_plots:
@@ -909,7 +921,10 @@ class Project:
                 plt.show()
             if save_plots:
                 file_name = plot_title + ".png"
-                basic_metrics_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis", file_name)
+                history_plots_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Train_history_plots")
+                if not os.path.isdir(history_plots_path):
+                    os.makedirs(history_plots_path)
+                basic_metrics_path = os.path.join(history_plots_path, file_name)
                 fig.savefig(basic_metrics_path, bbox_inches='tight', dpi=300)
         
             if not show_plots:
