@@ -22,10 +22,587 @@ import gc
 import ast
 from scipy.signal import savgol_filter
 
+import matplotlib as mpl
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.lib import colors
+import re
+from PIL import Image, ImageDraw
+from io import BytesIO
+from reportlab.graphics import renderPDF
+from svglib.svglib import svg2rlg
+import io
+from reportlab.lib.utils import ImageReader
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
 
 class Utils:
+    def Generate_model_pdf(model_hash,model_params, background_path,file_path):
+        def generate_distinct_colors(n):
+            """Generate a list of distinct, bright colors."""
+            cmap = mpl.colormaps['Paired']  # Use a colormap with many distinct colors
+            return [cmap(i) for i in range(n)]
+        
+        def create_donut_chart(classes, sizes, scale=1.0):
+            """
+            Create a donut chart with adjustable scale.
+            
+            Parameters:
+            - classes: List of class names.
+            - sizes: List of sizes for each class.
+            - scale: Scaling factor to adjust the size of the chart.
+            """
+            fig, ax = plt.subplots(figsize=(10 * scale, 10 * scale))  # Scale the figure size
+            total_classes = len(classes)
+            # Generate bright and saturated colors
+            colors = generate_distinct_colors(len(classes))
+            # Adjust font sizes proportionally to the scale, ensuring minimum and maximum limits
+            autopct_fontsize = int(round(total_classes*-0.373+scale*12.8+7.4))
+            total_classes_fontsize = int(round((total_classes*-0.373+scale*12.8+7.4)*4))  # Ensure max size for total number
+            class_name_fontsize = int(round((total_classes*-0.373+scale*12.8+7.4)*1.3))  # Ensure minimum size for class names
+        
+            
+            wedges, texts, autotexts = ax.pie(
+                sizes,
+                colors=colors,
+                startangle=140,
+                wedgeprops=dict(width=0.5),  # Adjust width for denser donut
+                autopct='%1.1f%%',
+                pctdistance=0.7,  # Move percentage text closer to the donut
+                textprops=dict(color="black", fontsize=autopct_fontsize)
+            )
+        
+            # Add percentages inside the corresponding segments with smaller font size
+            for autotext in autotexts:
+                autotext.set_fontsize(autopct_fontsize)  # Reduce percentage font size
+                autotext.set_weight('bold')
+                autotext.set_color('black')
+        
+            # Display the total number of classes in the center
+            
+            ax.text(0, 0, str(total_classes), ha='center', va='center', color='black', fontsize=total_classes_fontsize, weight='bold')
+        
+            # Add class names in a circular arrangement around the donut
+            radius = 1.3  # Distance from the center to place class names
+            for i, (wedge, size) in enumerate(zip(wedges, sizes)):
+                ang = (wedge.theta2 - wedge.theta1) / 2. + wedge.theta1
+                y = radius * np.sin(np.deg2rad(ang))
+                x = radius * np.cos(np.deg2rad(ang))
+                
+                # Avoid overlaps by adjusting the position based on angle
+                offset = 0.05 * np.sign(x)
+                ax.text(x + offset, y, classes[i], ha='center', va='center', color='black', fontsize=class_name_fontsize, weight='bold')
+        
+            # Remove axes and set transparent background
+            ax.axis('equal')
+            plt.axis('off')
+            fig.patch.set_facecolor('none')  # Set figure background to transparent
+        
+            # Save plot as SVG to a bytes buffer
+            buffer = BytesIO()
+            plt.savefig(buffer, format='svg', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+            buffer.seek(0)
+            
+            # Create a drawing object from the SVG buffer
+            drawing = svg2rlg(buffer)
+            
+            return drawing
+            
+        def find_number_after_m(s):
+            # Use regex to find 'm' followed by one or more digits
+            match = re.search(r'm(\d+)', s)
+            if match:
+                return int(match.group(1))
+            else:
+                return None
+        
+        
+        def sort_dict(d):
+            # Check if "learning_rate" is in the dictionary
+            has_learning_rate = "learning_rate" in d
+            
+            # Separate the keys
+            sorted_keys = sorted(d.keys())
+            
+            if has_learning_rate:
+                # Remove "learning_rate" and place it at the beginning
+                sorted_keys.remove("learning_rate")
+                sorted_keys.insert(0, "learning_rate")
+            
+            # Create a new sorted dictionary
+            sorted_dict = {key: d[key] for key in sorted_keys}
+            
+            return sorted_dict
+        
+        def split_string_at_length(s, max_length):
+            if len(s) <= max_length:
+                return s
+            
+            # Find the best split point
+            split_point = max_length+1
+            if ' ' in s[max_length:]:
+                # Look for the nearest space after max_length to avoid splitting words
+                split_point = s.rfind(' ', 0, max_length)
+                if split_point == -1:
+                    split_point = max_length
+            else:
+                # No spaces found, use the middle point
+                split_point = len(s) // 2
+        
+            return s[:split_point].rstrip() + '\n' + s[split_point:].lstrip()
+        
+        
+        
+        model_work_name = model_params["User Architecture Name"]
+        total_params = model_params["Total Parameters"]
+        layer_number = model_params["Number of Layers"]
+        model_dataType = model_params["Model Datatype"]
+        loss_function = model_params["Loss function"]
+        batch_size = model_params["Batch Size"]
+        
+        optimizer_dict = ast.literal_eval(model_params["Optimizer Parameters"])
+        
+        optimizer_name = optimizer_dict["name"]
+        del optimizer_dict["name"]
+        
+        optimizer_dict = sort_dict(optimizer_dict)
+        
+        img_h = model_params["Image Height"]
+        img_w = model_params["Image Width"]
+        img_color = "Grayscale" if model_params["Grayscale"] else 'RGB'
+        img_dataType = model_params["Image Datatype"]
+        
+        dataset_size = sum(c[1] for c in model_params["Class Size"])
+        augm = find_number_after_m(model_params["Augmentation Mark"])
+        
+        real_data_part = round(dataset_size*1 / augm/dataset_size,3)
+        aug_data_part = 1-real_data_part
+        
+        test_split = model_params["Test split"]
+        val_split = model_params["Validation split"]
+        
+        classes = [c[0] for c in model_params["Class Size"]]
+        class_size  = [c[1] for c in model_params["Class Size"]]
+        
+        ###
+        total_params = str(total_params)
+        layer_number = str(layer_number)
+        batch_size = str(batch_size)
+        img_h = str(img_h)
+        img_w = str(img_w)
+        dataset_size = str(dataset_size)
+        
+        classes = [s.replace(".npy","") for s in classes]
+        classes = [s.replace(".csv","") for s in classes]
+        classes = [split_string_at_length(s, 8) for s in classes]
+        
+        r = 0.25
+        g = 0.25
+        b = 0.25
+        
+        # Register custom font
+        pdfmetrics.registerFont(TTFont('Arial-Black', 'ariblk.ttf'))
+        
+        # Create a PDF document
+        pdf = canvas.Canvas(file_path, pagesize=letter)
+        width, height = letter
+        
+        # Draw the background image
+        pdf.drawImage(background_path, 0, 0, width=width, height=height)
+        
+        # Set the transparency for the background image (if needed)
+        pdf.setFillColorRGB(1, 1, 1, alpha=0.1)
+        pdf.rect(0, 0, width, height, stroke=0, fill=1)
+        
+        
+        #Title section
+        pdf.setFont("Helvetica", 16.5)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 50, model_hash)
+        
+        
+        supt_size = 13
+        #Model info section
+        pdf.setFont("Arial-Black", 20)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 100, "Model Info")
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 120, "Model workName: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 120, model_work_name)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 140, "Total params: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 140, total_params)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 160, "Number of layers: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 160, layer_number)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 180, "Model dataType: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 180, model_dataType)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 200, "Loss: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 200, loss_function)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 220, "Batch_size: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 220, batch_size)
+        
+        
+        #######################################################
+        supt_size = 13
+        #Optimizer info section
+        pdf.setFont("Arial-Black", 20)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 280, "Optimizer: ")
+        
+        pdf.setFont("Arial-Black", 20)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 280, optimizer_name)
+        
+        for i,item in enumerate(optimizer_dict):
+            offset = i*20
+            h = 300+offset
+            pdf.setFont("Arial-Black", supt_size)
+            pdf.setFillColor(colors.black)  
+            suptitle = item[0].upper()+item[1:].lower()
+            pdf.drawString(30, height - h, suptitle+": ")
+        
+            pdf.setFont("Helvetica", supt_size)
+            pdf.setFillColorRGB(r,g,b)  
+            pdf.drawString(170, height - h, str(optimizer_dict[item]))
+            
+        
+        
+        column_2 = 340
+        column_2_space = 180
+        
+        supt_size = 13
+        #Data info section
+        pdf.setFont("Arial-Black", 20)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 100, "Data parameters: ")
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 120, "Image height: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 120, img_h)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 140, "Image width: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 140, img_w)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 160, "Image color: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 160, img_color)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 180, "Image dataType: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 180, img_dataType)
+        
+        
+        supt_size = 13
+        #Data distribution section
+        pdf.setFont("Arial-Black", 20)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 280, "Data distribution: ")
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 300, "Total dataSet size: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 300, dataset_size)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 320, "Unmodified/Augmented: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 320, dataset_size+"/"+str(int(dataset_size)*(augm-1)))
+        
+        
+        #Real Aug plot section
+        ######################################################
+        bar_width = 245
+        bar_height = 26
+        contour = 2
+        
+        image = Image.new('RGB', (bar_width, bar_height), 'black')
+        draw = ImageDraw.Draw(image)
+         # Draw the background square with black contour
+        augm_box = [contour+1, contour+1, bar_width-(2*contour), bar_height-(2*contour)]
+        draw.rectangle(augm_box, fill='red')
+         # Draw the real data part
+        real_box= [contour+1, contour+1, (bar_width-(2*contour))*real_data_part, bar_height-(2*contour)]
+        draw.rectangle(real_box, fill='green')
+        
+        real_middle = (bar_width*real_data_part/2)+column_2
+        aug_middle = bar_width*(real_data_part+(aug_data_part*0.5))+column_2
+        
+        # Save image to a buffer
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        image = ImageReader(buffer)
+        pdf.drawImage(image, column_2, height - 400)
+        
+        
+        # Save and draw the image
+        #image.save("aug_plot.png")
+        #pdf.drawImage("aug_plot.png", column_2, height - 400)
+        
+        
+        #Real Aug plot text section
+        ######################################################
+        def add_word_with_pointers(pdf, name, variable, pointer_x,pointer_y,horizontal,vertical,left_border,right_border):
+        
+            # Calculate the width of the word
+            word_width_1 = stringWidth(name, "Arial-Black", 12)
+            word_width_2 = stringWidth(name, "Helvetica", 12)
+            string_width = word_width_1+word_width_2+1
+            
+            if horizontal == "left":
+                word_x = pointer_x - string_width - 15 
+            elif horizontal == "right":
+                word_x = pointer_x + 15
+            else:
+                print("Horizontal should be 'right' or 'left'")
+                return
+            
+            if vertical == "up":
+                word_y = pointer_y + 40
+            elif vertical == "down":
+                word_y = pointer_y - 40+26
+            else:
+                print("Vertical should be 'up' or 'down'" )
+                return
+            
+            if word_x < left_border:
+                word_x = left_border
+            if word_x+string_width> right_border:
+                word_x = right_border-string_width
+            
+            
+            #Writing words
+            pdf.setFont("Arial-Black", 12)
+            pdf.setFillColor(colors.black)  
+            pdf.drawString(word_x, word_y , name)
+        
+            pdf.setFont("Helvetica", 12)
+            pdf.setFillColor(colors.black)  
+            pdf.drawString(word_x+word_width_2+2, word_y , variable)
+            
+            # Draw the underline
+            underline_start = (word_x, word_y - 5)
+            underline_end = (word_x + string_width-5, word_y - 5)
+            pdf.setLineWidth(2)
+            pdf.line(underline_start[0], underline_start[1], underline_end[0], underline_end[1])
+            
+        
+           # Determine the closest edge for the pointer line
+            if abs(pointer_x - underline_start[0]) < abs(pointer_x - underline_end[0]):
+                pointer_start_x = underline_start[0]
+            else:
+                pointer_start_x = underline_end[0]
+        
+            pointer_start_y = underline_start[1]
+            
+            if vertical == "up":
+                pointer_y = pointer_y + 26
+            # Draw the pointer line
+            pdf.line(pointer_start_x, pointer_start_y, pointer_x, pointer_y)
+        
+            
+        if aug_data_part == 0:
+            h = "right"
+        else:
+            if real_data_part / aug_data_part > 0.5:
+                h = "left"
+            else:
+                h = "right"
+        if aug_data_part ==0.5:
+            real_middle = real_middle-30
+            h = "right"
+            
+            
+        add_word_with_pointers(pdf = pdf,
+                               name = "Real:  ",
+                               variable = str(int(round(real_data_part*100,2)))+"%",
+                               pointer_x = real_middle,
+                               pointer_y = 391,
+                               horizontal = h,
+                               vertical = "up",
+                               left_border = column_2,
+                               right_border = column_2+bar_width
+                               )
+        
+        
+        
+        if aug_data_part>0:
+            if aug_data_part!=0.5:
+                if real_data_part / aug_data_part > 0.5:
+                    h = "left"
+                else:
+                    h = "right"
+            else:
+                h = "right"
+                aug_middle = aug_middle-30
+            add_word_with_pointers(pdf = pdf,
+                                   name = "Aug:  ",
+                                   variable = str(int(round(aug_data_part*100,2)))+"%",
+                                   pointer_x = aug_middle,
+                                   pointer_y = 391,
+                                   horizontal = h,
+                                   vertical = "up",
+                                   left_border = column_2,
+                                   right_border = column_2+bar_width
+                                   )
+        
+
+        image = Image.new('RGB', (bar_width, bar_height), 'black')
+        draw = ImageDraw.Draw(image)
+        #Draw test part
+        test_box = [contour+1, contour+1, bar_width-(2*contour), bar_height-(2*contour)]
+        draw.rectangle(test_box, fill='red')
+        # Draw the val data part
+        val_box= [contour+1, contour+1, (bar_width-(2*contour))*(1-test_split), bar_height-(2*contour)]
+        draw.rectangle(val_box, fill='blue')
+        # Draw the real data part
+        train_box= [contour+1, contour+1, (bar_width-(2*contour))*(1-test_split-val_split), bar_height-(2*contour)]
+        draw.rectangle(train_box, fill='green')
+        # Save image to a buffer
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        image = ImageReader(buffer)
+        
+        pdf.drawImage(image, column_2, 320)
+        
+        train_middle = (bar_width*(1-val_split-test_split))/2+column_2
+        val_middle = bar_width*(1-val_split-test_split +val_split/2)+column_2
+        test_middle =bar_width*(1-test_split/2)+column_2
+        
+        
+        
+        if val_split>0:
+            train_split = 1-val_split-test_split
+            if train_split/val_split>1.3:
+                h = "left"
+            else:
+                h = "right"
+            if val_split>train_split:
+                h = "right"
+                
+        add_word_with_pointers(pdf = pdf,
+                               name = "Train:  ",
+                               variable = str(int(round((1-val_split-test_split)*100,2)))+"%",
+                               pointer_x = train_middle,
+                               pointer_y = 319,
+                               horizontal = h,
+                               vertical = "up",
+                               left_border = column_2,
+                               right_border = column_2+bar_width
+                               )
+        
+        if val_split>0:
+            train_split = 1-val_split-test_split
+         
+            if train_split/val_split>1.3:
+                h = "left"
+            else:
+                h = "right"
+                
+            if test_split:
+                if test_split>val_split:
+                    h = "right"
+            add_word_with_pointers(pdf = pdf,
+                                   name = "Val:  ",
+                                   variable = str(int(round(val_split*100,2)))+"%",
+                                   pointer_x = val_middle,
+                                   pointer_y = 319,
+                                   horizontal = h,
+                                   vertical = "up",
+                                   left_border = column_2,
+                                   right_border = column_2+bar_width
+                                   )
+            
+        if test_split>0:
+            add_word_with_pointers(pdf = pdf,
+                                   name = "Test:  ",
+                                   variable = str(int(round(test_split*100,2)))+"%",
+                                   pointer_x = test_middle,
+                                   pointer_y = 321,
+                                   horizontal = "left",
+                                   vertical = "down",
+                                   left_border = column_2,
+                                   right_border = column_2+bar_width
+                                   )
+        
+        donut_plot = create_donut_chart(classes =classes , sizes = class_size, scale = 0.3)
+        renderPDF.draw(donut_plot, pdf, 280, 30)
+        
+        
+        #Add small watermark
+        pdf.setFont("Helvetica", 8)
+        pdf.setFillColorRGB(0.5,0.5,0.5)  
+        pdf.drawString(470,7, "Report generated by NeuroUtils library")
+        
+        
+        pdf.save()
+    
+    
     
 
     def Initialize_data(DataBase_directory, Data_directory, img_H, img_W, grayscale, Load_from_CSV):
@@ -76,7 +653,17 @@ class Utils:
                 print("Dataset is initialized correctly!")
                    
     
-    def Process_Data(x , y ,dataset_multiplier, DataProcessed_directory, Create_test_set, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):        
+    def Process_Data(x , y ,dataset_multiplier, DataProcessed_directory, val_split = 0.2, test_split = 0, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):        
+        if val_split+test_split>1:
+            raise ValueError("Val_split and test_split cannot sum above 1, lower your values so they do not exceed 1")
+        elif val_split+test_split>0.5:
+            print("Size of train dataset is set under 50% of total amount of data, you may consider lowering values of validation and test set to achieve better performance")
+        
+        if test_split == 0:
+            Create_test_set = False
+        else:
+            Create_test_set = True
+            
         #Folder creation if not existing
         if not os.path.isdir(DataProcessed_directory):
             os.makedirs(DataProcessed_directory)
@@ -115,11 +702,14 @@ class Utils:
     
         print("There is no Dataset processed, processing Dataset...")
 
+        f1_factor = val_split+test_split
+        f2_factor = test_split/f1_factor
+
         if not Create_test_set:
-            x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.2 ,stratify = y, shuffle = True)
+            x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = f1_factor ,stratify = y, shuffle = True)
         else:
-            x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = 0.3 ,stratify = y, shuffle = True)
-            x_val , x_test , y_val , y_test = train_test_split(x_val,y_val,test_size = 0.66 ,stratify = y_val, shuffle = True)
+            x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = f1_factor ,stratify = y, shuffle = True)
+            x_val , x_test , y_val , y_test = train_test_split(x_val,y_val,test_size = f2_factor ,stratify = y_val, shuffle = True)
         
         print("Augmentation of images...")
         if (not (flipRotate or randBright or gaussian or denoise or contour)) and dataset_multiplier >1:
@@ -498,13 +1088,14 @@ class Project:
             return X, Y, DICTIONARY
             ########################################################
             
-        def Process_data(self,X,Y,Create_test_set = False,DataSet_multiplier = 1,DataType = "float32",FlipRotate = False,
+        def Process_data(self,X,Y,Val_split,Test_split,DataSet_multiplier = 1,DataType = "float32",FlipRotate = False,
                                                                                                       RandBright = False,
                                                                                                       Gaussian_noise = False,
                                                                                                       Denoise = False,
                                                                                                       Contour = False):
             
-            self.CREATE_TEST_SET = Create_test_set
+            self.VAL_SPLIT = Val_split
+            self.TEST_SPLIT = Test_split
             self.DATASET_MULTIPLIER = DataSet_multiplier
             self.DATA_TYPE = DataType
             
@@ -519,17 +1110,21 @@ class Project:
             cr = 0 if self.REDUCED_SET_SIZE is None else self.REDUCED_SET_SIZE
             self.PARAM_MARK = "_m"+str(self.DATASET_MULTIPLIER)+"_cr"+str(cr)+"_"+ "_".join(["1" if x else "0" for x in [self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR]])
             self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
-            
-            
+            if self.TEST_SPLIT == 0:
+                create_test_set = False
+            else:
+                create_test_set = True
             #3
             ########################################################
-            if not self.CREATE_TEST_SET:
-                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.CREATE_TEST_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+            self.SPLIT_MARK = "Val_"+str(round(Val_split,3))+"  Test_"+str(round(Test_split,3))
+            self.DATAPROCESSED_DIRECTORY = os.path.join(self.DATAPROCESSED_DIRECTORY,self.SPLIT_MARK)
+            if not create_test_set:
+                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.VAL_SPLIT, self.TEST_SPLIT, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
             
             else:
                 X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.CREATE_TEST_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
             
-            if self.CREATE_TEST_SET:
+            if create_test_set:
                 X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)
                 Y_TRAIN = np.array(Y_TRAIN , dtype = self.DATA_TYPE)
                 
@@ -615,6 +1210,8 @@ class Project:
             #Create data for parameters file
             n_classes = self.N_CLASSES
             class_size = self.CLASS_OCCURENCE
+            val_split = self.VAL_SPLIT
+            test_split = self.TEST_SPLIT
             
             img_H = self.IMG_H
             img_W = self.IMG_W
@@ -638,6 +1235,8 @@ class Project:
             content = {
                 "Number of Classes": n_classes,
                 "Class Size": class_size,
+                "Validation split": val_split,
+                "Test split": test_split,
                 "Image Height": img_H,
                 "Image Width": img_W,
                 "Grayscale": grayscale,
@@ -668,6 +1267,13 @@ class Project:
             # Write dictionary to JSON file
             with open(params_directory, 'w') as json_file:
                 json.dump(content, json_file, indent=4)
+                
+            #Create and save pdf of model
+            Utils.Generate_model_pdf(model_hash = f_name,
+                                     model_params = content,
+                                     background_path = r"C:\Users\Stacja_Robocza\Desktop\NeuroUtils\Assets\Background.png",
+                                     file_path = os.path.join(self.MODEL_DIRECTORY , "Model_preview.pdf")
+                                     )
 
 
             self.MODEL = Utils.Initialize_weights_and_training(x_train = self.X_TRAIN,
@@ -931,7 +1537,7 @@ class Project:
                 plt.close()
             
             
-        def Models_analysis(self,models_directory = "Models_saved", save_plots = True, show_plots = False):
+        def Models_analysis(self,models_directory = "Models_saved", show_plots = False, save_plots = True):
             print("----------------------------------------------------------------------------")
             print("Starting trained models analysis...")
             
@@ -1047,7 +1653,7 @@ class Project:
                     Img_H = param_data["Image Height"]
                     Img_W = param_data["Image Width"]
                     
-                    processed_data_dir = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(Img_H)+"x"+str(Img_W)+"_"+Form),Aug_mark)
+                    processed_data_dir = self.DATAPROCESSED_DIRECTORY
                     
                     Keras_model = tf.keras.models.load_model(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model.keras"))
                     try:
