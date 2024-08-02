@@ -1263,11 +1263,25 @@ class Project:
                 os.mkdir(model_directory)
             
             params_directory = os.path.join(model_directory,"Model_parameters.json")
-            # Save the content to a text file
+            model_png_directory = os.path.join(model_directory,"Model_architecture_view.png")
+            model_json_directory = os.path.join(model_directory,"Model_architecture_json.json")
             # Write dictionary to JSON file
             with open(params_directory, 'w') as json_file:
                 json.dump(content, json_file, indent=4)
-                
+               
+            if not os.path.exists(model_png_directory): 
+                #Generate model png view of architecture
+                tf.keras.utils.plot_model(model = Model,
+                                          to_file = model_png_directory,
+                                          show_shapes = True,
+                                          show_layer_names = True
+                                          )
+                print("Model architecture png view saved")
+            if not os.path.exists(model_json_directory):
+                #Save model architecture only so it can be retrieved in future
+                ml.General.save_model_as_json(model = Model, filename = model_json_directory)
+                print("Model architecture JSON template saved")
+            
             #Create and save pdf of model
             Utils.Generate_model_pdf(model_hash = f_name,
                                      model_params = content,

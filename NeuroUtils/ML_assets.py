@@ -479,6 +479,37 @@ class ImageProcessing:
         return image        
 
 class General:
+    def save_model_as_json(model, filename='model_architecture.json'):
+        """
+        Saves the model architecture as a JSON file.
+
+        Args:
+        model (tf.keras.Model): The Keras model to save.
+        filename (str): The filename to save the JSON as.
+        """
+        model_json = model.to_json()
+        with open(filename, "w") as json_file:
+            json_file.write(model_json)
+
+
+    def load_model_from_json(filename='model_architecture.json'):
+        """
+        Loads a Keras model from a JSON file.
+
+        Args:
+        filename (str): The JSON file containing the model architecture.
+
+        Returns:
+        tf.keras.Model: The loaded Keras model.
+        """
+        with open(filename, "r") as json_file:
+            loaded_model_json = json_file.read()
+        model = tf.keras.models.model_from_json(loaded_model_json)
+        print(f"Model architecture loaded from {filename}")
+        return model
+    
+    
+    
     def compute_overtrain_metric(train_metric,val_metric, alpha = 2):
         otr = (train_metric - val_metric) / train_metric
         ofi = otr * math.exp(alpha * train_metric)
