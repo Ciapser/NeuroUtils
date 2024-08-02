@@ -767,9 +767,10 @@ class Utils:
             
 
     class SaveBestModel(tf.keras.callbacks.Callback):
-        def __init__(self, filepath, monitor='val_loss', mode='min', min_delta=0):
+        def __init__(self, filepath, best_filepath, monitor='val_loss', mode='min', min_delta=0):
             super().__init__()
             self.filepath = filepath
+            self.best_filepath = best_filepath
             self.monitor = monitor
             self.mode = mode
             self.min_delta = min_delta
@@ -791,12 +792,13 @@ class Utils:
 
         def on_epoch_end(self, epoch, logs=None):
             current_score = logs.get(self.monitor)
+            self.model.save(self.filepath)
 
             if current_score is not None:
                 if self._is_improvement(current_score, self.best_score):
                     print(f"\nImprovement detected in {self.monitor}. Saving model with score: {current_score:.4f}")
                     self.best_score = current_score
-                    self.model.save(self.filepath)
+                    self.model.save(self.best_filepath)
                     self._save_best_score(self.best_score)
                 else:
                     print(f"\nNo improvement in {self.monitor}. Not saving model. Model score: {current_score:.4f} vs {self.best_score:.4f}")
@@ -877,6 +879,7 @@ class Utils:
         model_weights_directory = os.path.join(model_directory , "Model.keras")
         model_history_directory = os.path.join(model_directory , "Model_history.csv")
         model_metrics_directory = os.path.join(model_directory , "Model_metrics.csv")
+        best_model_directory = os.path.join(model_directory , "Model_best.keras")
         
         model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, epochs, model_weights_directory, model_history_directory)
         
@@ -895,7 +898,7 @@ class Utils:
                                                          monitor='val_accuracy',
                                                          min_delta=min_delta),
                         #Checkpoint model if performance is increased
-                        Utils.SaveBestModel(filepath=model_weights_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),       
+                        Utils.SaveBestModel(filepath=model_weights_directory, best_filepath = best_model_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),       
                         #Save data through training
                         tf.keras.callbacks.CSVLogger(filename = model_history_directory , append = csv_append),
                         #Saving model metrics TP,FP,FN,TN
@@ -922,7 +925,7 @@ class Utils:
             
             #Save the best achieved model
             print("Loading model which was performing best during training...\n")
-            model.load_weights(model_weights_directory)   
+            model.load_weights(best_model_directory)   
                 
         
              
