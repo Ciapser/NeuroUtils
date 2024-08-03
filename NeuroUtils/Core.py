@@ -1148,7 +1148,7 @@ class Project:
                 X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.VAL_SPLIT, self.TEST_SPLIT, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
             
             else:
-                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.CREATE_TEST_SET, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
+                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.VAL_SPLIT, self.TEST_SPLIT, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
             
             if create_test_set:
                 X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)

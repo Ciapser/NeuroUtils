@@ -274,7 +274,11 @@ class DataSets:
               
 
     def Augment_classification_dataset(x, y, dataset_multiplier, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):
-        n_classes = y.shape[1]
+        try:
+            n_classes = y.shape[1]
+        except:
+            n_classes = len(y)
+            
         lenght = x.shape[0]
         img_H = x.shape[1]
         img_W = x.shape[2]
@@ -284,10 +288,9 @@ class DataSets:
             channels = 1
         
         blank_class_y = np.zeros((0,n_classes) , dtype = np.uint8)
-        if channels == 1:
-            blank_class_x = np.zeros((0,img_H,img_W) , dtype = np.uint8)
-        else:
-            blank_class_x = np.zeros((0,img_H,img_W,channels) , dtype = np.uint8)
+        blank_class_x = np.zeros((0,img_H,img_W,channels) , dtype = np.uint8)
+
+
             
         if dataset_multiplier == 1 :
             pass
@@ -300,8 +303,13 @@ class DataSets:
                 for i in tqdm(range(lenght)):
                     if np.mean(x[i]) == 0:
                         x[i,0,0,0] = 1
-                    aug_img = ImageProcessing.augment_image(x[i] , flipRotate , randBright , gaussian , denoise ,  contour)
-        
+                    aug_img = ImageProcessing.augment_image(image = x[i],
+                                                            rand_bright = randBright,
+                                                            gaussian = gaussian,
+                                                            denoise = denoise,
+                                                            flip_rotate = flipRotate,
+                                                            contour = contour  
+                                                            )
                     x_aug.append(aug_img)
                     
                 x_aug = np.asarray(x_aug)
