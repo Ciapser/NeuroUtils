@@ -189,6 +189,8 @@ class Utils:
         classes = [c[0] for c in model_params["Class Size"]]
         class_size  = [c[1] for c in model_params["Class Size"]]
         
+        checkpoint_monitor = model_params["Checkpoint monitor"]
+        checkpoint_mode = model_params["Checkpoint mode"]
         ###
         total_params = str(total_params)
         layer_number = str(layer_number)
@@ -304,6 +306,27 @@ class Utils:
             pdf.setFillColorRGB(r,g,b)  
             pdf.drawString(170, height - h, str(optimizer_dict[item]))
             
+        #To unmess up
+        ###########
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 500, "Checkp. monitor: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 500, checkpoint_monitor)
+        
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 520, "Checkp. mode: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 520, checkpoint_mode)
+        ###########
+        ###########
+        
         
         
         column_2 = 340
@@ -867,7 +890,7 @@ class Utils:
 
 
                 
-    def Initialize_weights_and_training(x_train, y_train, model, model_directory, train, epochs, patience, batch_size,min_delta, x_val=None, y_val=None, device = "CPU:0"):    
+    def Initialize_weights_and_training(x_train, y_train, model, model_directory, train, epochs, patience, batch_size,min_delta, monitor, mode, x_val=None, y_val=None, device = "CPU:0"):    
         #!!! Model training
         #########################################################################
         #########################################################################
@@ -895,10 +918,10 @@ class Utils:
             callbacks = [
                         #Stop if no increase in accuracy after x epochs
                         tf.keras.callbacks.EarlyStopping(patience=patience, 
-                                                         monitor='val_accuracy',
+                                                         monitor=monitor,
                                                          min_delta=min_delta),
                         #Checkpoint model if performance is increased
-                        Utils.SaveBestModel(filepath=model_weights_directory, best_filepath = best_model_directory, monitor='val_accuracy', mode='max',min_delta = min_delta),       
+                        Utils.SaveBestModel(filepath=model_weights_directory, best_filepath = best_model_directory, monitor=monitor, mode=mode,min_delta = min_delta),       
                         #Save data through training
                         tf.keras.callbacks.CSVLogger(filename = model_history_directory , append = csv_append),
                         #Saving model metrics TP,FP,FN,TN
@@ -1202,11 +1225,12 @@ class Project:
             
     
     
-        def Initialize_weights_and_training(self, Model, Architecture_name, Epochs, Batch_size, Train = True, Patience = 10, Min_delta_to_save = 0.1, Device = "CPU", add_config_info = None):
+        def Initialize_weights_and_training(self, Model, Architecture_name, Epochs, Batch_size, Train = True, Patience = 10, Min_delta_to_save = 0.1, Checkpoint_monitor = "val_loss", Checkpoint_mode = "min", Device = "CPU", add_config_info = None):
             self.ARCHITECTURE_NAME = Architecture_name
             self.EPOCHS = Epochs
             self.BATCH_SIZE = Batch_size
-            
+            self.CHECKPOINT_MONITOR = Checkpoint_monitor
+            self.CHECKPOINT_MODE = Checkpoint_mode
             
             #5
             ########################################################
@@ -1254,6 +1278,8 @@ class Project:
                 "Batch Size": batch_size,
                 "Optimizer Parameters": optimizer_params,
                 "Loss function": loss,
+                "Checkpoint monitor": self.CHECKPOINT_MONITOR,
+                "Checkpoint mode": self.CHECKPOINT_MODE,
                 "Additional information": add_config_info
             }
             
@@ -1304,6 +1330,8 @@ class Project:
                                                        patience = Patience,
                                                        batch_size = self.BATCH_SIZE,
                                                        min_delta= Min_delta_to_save,
+                                                       monitor = self.CHECKPOINT_MONITOR,
+                                                       mode = Checkpoint_mode,
                                                        device = Device
                                                        )
             
@@ -1569,7 +1597,7 @@ class Project:
             folders = []
             for item in unfiltered_folders:
                 contains_all_files = True
-                files = ["Model.keras", "Model.keras_score.json", "Model_history.csv", "Model_parameters.json"]
+                files = ["Model_best.keras", "Model.keras", "Model.keras_score.json", "Model_history.csv", "Model_parameters.json"]
                 for file in files:
                     if not os.path.isfile(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",item,file)):
                         print("Model: ",item,"do not contain file: ",file,"and wont be considered in the analysis")
@@ -1650,9 +1678,16 @@ class Project:
                     Model_Dtype = param_data["Model Datatype"]
                     Batch_Size = param_data["Batch Size"]
                     Epochs_Trained = Model_history["epoch"].iloc[-1]
-                    best_val_acc = Model_history["val_accuracy"].idxmax()
-                    Epochs_toBest = (Model_history['val_accuracy'] == Model_history["val_accuracy"][best_val_acc]).idxmax()
-                    
+                    if self.CHECKPOINT_MODE == "min":
+                        best_metric = Model_history[self.CHECKPOINT_MONITOR].idxmin()
+                    elif self.CHECKPOINT_MODE =="max":
+                        best_metric = Model_history[self.CHECKPOINT_MONITOR].idxmax()
+                    else:
+                        print("Incorrect checkpoint_mode!")
+                        
+
+                    Epochs_toBest = (Model_history[self.CHECKPOINT_MONITOR] == Model_history[self.CHECKPOINT_MONITOR][best_metric]).idxmax()
+
                     Optimizer_data = param_data["Optimizer Parameters"]
                     Loss_type = param_data["Loss function"]
 
@@ -1672,7 +1707,7 @@ class Project:
                     
                     processed_data_dir = self.DATAPROCESSED_DIRECTORY
                     
-                    Keras_model = tf.keras.models.load_model(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model.keras"))
+                    Keras_model = tf.keras.models.load_model(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_best.keras"))
                     try:
                         x_train = (np.load(os.path.join(processed_data_dir,"x_train.npy"))/255).astype(Img_Dtype)
                         y_train = np.load(os.path.join(processed_data_dir,"y_train.npy"))
@@ -1827,7 +1862,6 @@ class Project:
             t_f2 =[]
             t_bal_acc = []
             t_ROC_AUC = []
-            
             #Val lists
             v_acc = []
             v_prec = []
@@ -2325,7 +2359,7 @@ class Project:
 
 
 
-    
+   
     class Gan_Project:
         def  __init__(self,config):
             #Low level constants
@@ -2863,7 +2897,7 @@ class Project:
             
             return gen_img_list , inter_slider
             
-            
+        
             
                         
                     
