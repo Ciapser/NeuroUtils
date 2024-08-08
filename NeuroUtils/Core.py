@@ -23,7 +23,7 @@ import ast
 from scipy.signal import savgol_filter
 
 import matplotlib as mpl
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -1282,11 +1282,17 @@ class Utils:
             
             # Find the best split point
             split_point = max_length+1
-            if ' ' in s[max_length:]:
-                # Look for the nearest space after max_length to avoid splitting words
-                split_point = s.rfind(' ', 0, max_length)
-                if split_point == -1:
-                    split_point = max_length
+            if ' ' or '_' in s[max_length:]:
+                if ' ' in s[max_length:]:
+                    # Look for the nearest space after max_length to avoid splitting words
+                    split_point = s.rfind(' ', 0, max_length)
+                    if split_point == -1:
+                        split_point = max_length
+                elif '_' in s[max_length:]:
+                    # Look for the nearest space after max_length to avoid splitting words
+                    split_point = s.rfind('_', 0, max_length)
+                    if split_point == -1:
+                        split_point = max_length
             else:
                 # No spaces found, use the middle point
                 split_point = len(s) // 2
@@ -1294,7 +1300,65 @@ class Utils:
             return s[:split_point].rstrip() + '\n' + s[split_point:].lstrip()
         
         
+        def add_word_with_pointers(pdf, name, variable, pointer_x,pointer_y,horizontal,vertical,left_border,right_border):
         
+            # Calculate the width of the word
+            word_width_1 = stringWidth(name, "Arial-Black", 12)
+            word_width_2 = stringWidth(name, "Helvetica", 12)
+            string_width = word_width_1+word_width_2+1
+            
+            if horizontal == "left":
+                word_x = pointer_x - string_width - 15 
+            elif horizontal == "right":
+                word_x = pointer_x + 15
+            else:
+                print("Horizontal should be 'right' or 'left'")
+                return
+            
+            if vertical == "up":
+                word_y = pointer_y + 40
+            elif vertical == "down":
+                word_y = pointer_y - 40+26
+            else:
+                print("Vertical should be 'up' or 'down'" )
+                return
+            
+            if word_x < left_border:
+                word_x = left_border
+            if word_x+string_width> right_border:
+                word_x = right_border-string_width
+            
+            
+            #Writing words
+            pdf.setFont("Arial-Black", 12)
+            pdf.setFillColor(colors.black)  
+            pdf.drawString(word_x, word_y , name)
+        
+            pdf.setFont("Helvetica", 12)
+            pdf.setFillColor(colors.black)  
+            pdf.drawString(word_x+word_width_2+2, word_y , variable)
+            
+            # Draw the underline
+            underline_start = (word_x, word_y - 5)
+            underline_end = (word_x + string_width-5, word_y - 5)
+            pdf.setLineWidth(2)
+            pdf.line(underline_start[0], underline_start[1], underline_end[0], underline_end[1])
+            
+        
+           # Determine the closest edge for the pointer line
+            if abs(pointer_x - underline_start[0]) < abs(pointer_x - underline_end[0]):
+                pointer_start_x = underline_start[0]
+            else:
+                pointer_start_x = underline_end[0]
+        
+            pointer_start_y = underline_start[1]
+            
+            if vertical == "up":
+                pointer_y = pointer_y + 26
+            # Draw the pointer line
+            pdf.line(pointer_start_x, pointer_start_y, pointer_x, pointer_y)
+            
+            
         model_work_name = model_params["User Architecture Name"]
         total_params = model_params["Total Parameters"]
         layer_number = model_params["Number of Layers"]
@@ -1314,17 +1378,25 @@ class Utils:
         img_color = "Grayscale" if model_params["Grayscale"] else 'RGB'
         img_dataType = model_params["Image Datatype"]
         
-        dataset_size = sum(c[1] for c in model_params["Class Size"])
-        augm = find_number_after_m(model_params["Augmentation Mark"])
-        
-        real_data_part = round(dataset_size*1 / augm/dataset_size,3)
-        aug_data_part = 1-real_data_part
+
         
         test_split = model_params["Test split"]
         val_split = model_params["Validation split"]
+        augm = find_number_after_m(model_params["Augmentation Mark"])
+        def raw_class_size(class_size,v_split,t_split,aug):
+            raw_class = class_size/((1-v_split-t_split)*aug+v_split)
+            return raw_class
         
+        class_size  = [raw_class_size(c[1],val_split,test_split,augm) for c in model_params["Class Size"]]
         classes = [c[0] for c in model_params["Class Size"]]
-        class_size  = [c[1] for c in model_params["Class Size"]]
+
+        dataset_size = int(sum([c*(augm*(1-val_split-test_split)+val_split+test_split) for c in class_size]))
+        
+        real_data_part = round(sum([c/(c*augm) for c in class_size])/len(class_size),3)
+        aug_data_part = round(1-real_data_part,3)
+        
+        
+        
         
         checkpoint_monitor = model_params["Checkpoint monitor"]
         checkpoint_mode = model_params["Checkpoint mode"]
@@ -1348,11 +1420,11 @@ class Utils:
         pdfmetrics.registerFont(TTFont('Arial-Black', 'ariblk.ttf'))
         
         # Create a PDF document
-        pdf = canvas.Canvas(file_path, pagesize=letter)
-        width, height = letter
+        pdf = canvas.Canvas(file_path, pagesize=A4)
+        width, height = A4
         
         # Draw the background image
-        pdf.drawImage(background_path, 0, 0, width=width, height=height)
+        #pdf.drawImage(background_path, 0, 0, width=width, height=height)
         
         # Set the transparency for the background image (if needed)
         pdf.setFillColorRGB(1, 1, 1, alpha=0.1)
@@ -1360,7 +1432,7 @@ class Utils:
         
         
         #Title section
-        pdf.setFont("Helvetica", 16.5)
+        pdf.setFont("Helvetica", 14)
         pdf.setFillColor(colors.black)  
         pdf.drawString(30, height - 50, model_hash)
         
@@ -1405,19 +1477,43 @@ class Utils:
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(30, height - 200, "Loss: ")
+        pdf.drawString(30, height - 200, "Batch_size: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(170, height - 200, loss_function)
+        pdf.drawString(170, height - 200, batch_size)
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(30, height - 220, "Batch_size: ")
+        pdf.drawString(30, height - 220, "Checkp. monitor: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(170, height - 220, batch_size)
+        pdf.drawString(170, height - 220, checkpoint_monitor)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 240, "Checkp. mode: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(170, height - 240, checkpoint_mode)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(30, height - 260, "Loss: ")
+        
+        loss_function = split_string_at_length(loss_function, 11)
+        
+        loss_lines = loss_function.split("\n")
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)
+        h = 0
+        for line in loss_lines:
+            pdf.drawString(170, height - (260+h), line)
+            h+=20
+            
+
         
         
         #######################################################
@@ -1425,15 +1521,15 @@ class Utils:
         #Optimizer info section
         pdf.setFont("Arial-Black", 20)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(30, height - 280, "Optimizer: ")
+        pdf.drawString(30, height - 320, "Optimizer: ")
         
         pdf.setFont("Arial-Black", 20)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(170, height - 280, optimizer_name)
+        pdf.drawString(170, height - 320, optimizer_name)
         
         for i,item in enumerate(optimizer_dict):
             offset = i*20
-            h = 300+offset
+            h = 340+offset
             pdf.setFont("Arial-Black", supt_size)
             pdf.setFillColor(colors.black)  
             suptitle = item[0].upper()+item[1:].lower()
@@ -1443,30 +1539,11 @@ class Utils:
             pdf.setFillColorRGB(r,g,b)  
             pdf.drawString(170, height - h, str(optimizer_dict[item]))
             
-        #To unmess up
-        ###########
-        pdf.setFont("Arial-Black", supt_size)
-        pdf.setFillColor(colors.black)  
-        pdf.drawString(30, height - 500, "Checkp. monitor: ")
-        
-        pdf.setFont("Helvetica", supt_size)
-        pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(170, height - 500, checkpoint_monitor)
-        
-        
-        pdf.setFont("Arial-Black", supt_size)
-        pdf.setFillColor(colors.black)  
-        pdf.drawString(30, height - 520, "Checkp. mode: ")
-        
-        pdf.setFont("Helvetica", supt_size)
-        pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(170, height - 520, checkpoint_mode)
-        ###########
-        ###########
+
         
         
         
-        column_2 = 340
+        column_2 = 320
         column_2_space = 180
         
         supt_size = 13
@@ -1526,150 +1603,26 @@ class Utils:
         pdf.setFillColor(colors.black)  
         pdf.drawString(column_2, height - 320, "Unmodified/Augmented: ")
         
+        modified = int(sum([c*(1-val_split-test_split) for c in class_size]))
+        modified = int(modified*(augm-1))
+        unmodified = int(sum([c for c in class_size]))
+        
+        unmodified = str(unmodified)
+        modified = str(modified)
+        
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 320, dataset_size+"/"+str(int(dataset_size)*(augm-1)))
+        pdf.drawString(column_2+column_2_space, height - 320, unmodified+"/"+modified)
         
         
-        #Real Aug plot section
-        ######################################################
+
+
         bar_width = 245
         bar_height = 26
         contour = 2
         
-        image = Image.new('RGB', (bar_width, bar_height), 'black')
-        draw = ImageDraw.Draw(image)
-         # Draw the background square with black contour
-        augm_box = [contour+1, contour+1, bar_width-(2*contour), bar_height-(2*contour)]
-        draw.rectangle(augm_box, fill='red')
-         # Draw the real data part
-        real_box= [contour+1, contour+1, (bar_width-(2*contour))*real_data_part, bar_height-(2*contour)]
-        draw.rectangle(real_box, fill='green')
-        
-        real_middle = (bar_width*real_data_part/2)+column_2
-        aug_middle = bar_width*(real_data_part+(aug_data_part*0.5))+column_2
-        
-        # Save image to a buffer
-        buffer = io.BytesIO()
-        image.save(buffer, format='PNG')
-        buffer.seek(0)
-        
-        image = ImageReader(buffer)
-        pdf.drawImage(image, column_2, height - 400)
-        
-        
-        # Save and draw the image
-        #image.save("aug_plot.png")
-        #pdf.drawImage("aug_plot.png", column_2, height - 400)
-        
-        
-        #Real Aug plot text section
+        #Train val test section
         ######################################################
-        def add_word_with_pointers(pdf, name, variable, pointer_x,pointer_y,horizontal,vertical,left_border,right_border):
-        
-            # Calculate the width of the word
-            word_width_1 = stringWidth(name, "Arial-Black", 12)
-            word_width_2 = stringWidth(name, "Helvetica", 12)
-            string_width = word_width_1+word_width_2+1
-            
-            if horizontal == "left":
-                word_x = pointer_x - string_width - 15 
-            elif horizontal == "right":
-                word_x = pointer_x + 15
-            else:
-                print("Horizontal should be 'right' or 'left'")
-                return
-            
-            if vertical == "up":
-                word_y = pointer_y + 40
-            elif vertical == "down":
-                word_y = pointer_y - 40+26
-            else:
-                print("Vertical should be 'up' or 'down'" )
-                return
-            
-            if word_x < left_border:
-                word_x = left_border
-            if word_x+string_width> right_border:
-                word_x = right_border-string_width
-            
-            
-            #Writing words
-            pdf.setFont("Arial-Black", 12)
-            pdf.setFillColor(colors.black)  
-            pdf.drawString(word_x, word_y , name)
-        
-            pdf.setFont("Helvetica", 12)
-            pdf.setFillColor(colors.black)  
-            pdf.drawString(word_x+word_width_2+2, word_y , variable)
-            
-            # Draw the underline
-            underline_start = (word_x, word_y - 5)
-            underline_end = (word_x + string_width-5, word_y - 5)
-            pdf.setLineWidth(2)
-            pdf.line(underline_start[0], underline_start[1], underline_end[0], underline_end[1])
-            
-        
-           # Determine the closest edge for the pointer line
-            if abs(pointer_x - underline_start[0]) < abs(pointer_x - underline_end[0]):
-                pointer_start_x = underline_start[0]
-            else:
-                pointer_start_x = underline_end[0]
-        
-            pointer_start_y = underline_start[1]
-            
-            if vertical == "up":
-                pointer_y = pointer_y + 26
-            # Draw the pointer line
-            pdf.line(pointer_start_x, pointer_start_y, pointer_x, pointer_y)
-        
-            
-        if aug_data_part == 0:
-            h = "right"
-        else:
-            if real_data_part / aug_data_part > 0.5:
-                h = "left"
-            else:
-                h = "right"
-        if aug_data_part ==0.5:
-            real_middle = real_middle-30
-            h = "right"
-            
-            
-        add_word_with_pointers(pdf = pdf,
-                               name = "Real:  ",
-                               variable = str(int(round(real_data_part*100,2)))+"%",
-                               pointer_x = real_middle,
-                               pointer_y = 391,
-                               horizontal = h,
-                               vertical = "up",
-                               left_border = column_2,
-                               right_border = column_2+bar_width
-                               )
-        
-        
-        
-        if aug_data_part>0:
-            if aug_data_part!=0.5:
-                if real_data_part / aug_data_part > 0.5:
-                    h = "left"
-                else:
-                    h = "right"
-            else:
-                h = "right"
-                aug_middle = aug_middle-30
-            add_word_with_pointers(pdf = pdf,
-                                   name = "Aug:  ",
-                                   variable = str(int(round(aug_data_part*100,2)))+"%",
-                                   pointer_x = aug_middle,
-                                   pointer_y = 391,
-                                   horizontal = h,
-                                   vertical = "up",
-                                   left_border = column_2,
-                                   right_border = column_2+bar_width
-                                   )
-        
-
         image = Image.new('RGB', (bar_width, bar_height), 'black')
         draw = ImageDraw.Draw(image)
         #Draw test part
@@ -1688,7 +1641,7 @@ class Utils:
         
         image = ImageReader(buffer)
         
-        pdf.drawImage(image, column_2, 320)
+        pdf.drawImage(image, column_2, 450)
         
         train_middle = (bar_width*(1-val_split-test_split))/2+column_2
         val_middle = bar_width*(1-val_split-test_split +val_split/2)+column_2
@@ -1709,7 +1662,7 @@ class Utils:
                                name = "Train:  ",
                                variable = str(int(round((1-val_split-test_split)*100,2)))+"%",
                                pointer_x = train_middle,
-                               pointer_y = 319,
+                               pointer_y = 449,
                                horizontal = h,
                                vertical = "up",
                                left_border = column_2,
@@ -1731,7 +1684,7 @@ class Utils:
                                    name = "Val:  ",
                                    variable = str(int(round(val_split*100,2)))+"%",
                                    pointer_x = val_middle,
-                                   pointer_y = 319,
+                                   pointer_y = 449,
                                    horizontal = h,
                                    vertical = "up",
                                    left_border = column_2,
@@ -1743,21 +1696,87 @@ class Utils:
                                    name = "Test:  ",
                                    variable = str(int(round(test_split*100,2)))+"%",
                                    pointer_x = test_middle,
-                                   pointer_y = 321,
+                                   pointer_y = 451,
                                    horizontal = "left",
                                    vertical = "down",
                                    left_border = column_2,
                                    right_border = column_2+bar_width
                                    )
         
+        
+        
+
+        #Real Aug plot section
+        ######################################################
+        image = Image.new('RGB', (bar_width, bar_height), 'black')
+        draw = ImageDraw.Draw(image)
+         # Draw the background square with black contour
+        augm_box = [contour+1, contour+1, bar_width-(2*contour), bar_height-(2*contour)]
+        draw.rectangle(augm_box, fill='red')
+         # Draw the real data part
+        real_box= [contour+1, contour+1, (bar_width-(2*contour))*real_data_part, bar_height-(2*contour)]
+        draw.rectangle(real_box, fill='green')
+        
+        real_middle = (bar_width*real_data_part/2)+column_2
+        aug_middle = bar_width*(real_data_part+(aug_data_part*0.5))+column_2
+        
+        # Save image to a buffer
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        image = ImageReader(buffer)
+        pdf.drawImage(image, column_2, 370)
+
+        if aug_data_part == 0:
+            h = "right"
+        else:
+            if real_data_part / aug_data_part > 0.5:
+                h = "left"
+            else:
+                h = "right"
+        if aug_data_part ==0.5:
+            real_middle = real_middle-30
+            h = "right"
+            
+            
+        add_word_with_pointers(pdf = pdf,
+                               name = "Train:  ",
+                               variable = str(int(round(real_data_part*100,2)))+"%",
+                               pointer_x = real_middle,
+                               pointer_y = 369,
+                               horizontal = h,
+                               vertical = "up",
+                               left_border = column_2,
+                               right_border = column_2+bar_width
+                               )
+        
+        
+        
+        if aug_data_part>0:
+            h = "left"
+            add_word_with_pointers(pdf = pdf,
+                                   name = "Train Aug:    ",
+                                   variable = str(int(round(aug_data_part*100,2)))+"%",
+                                   pointer_x = aug_middle,
+                                   pointer_y = 371,
+                                   horizontal = h,
+                                   vertical = "down",
+                                   left_border = column_2,
+                                   right_border = column_2+bar_width
+                                   )
+
+
+        
+        
         donut_plot = create_donut_chart(classes =classes , sizes = class_size, scale = 0.3)
-        renderPDF.draw(donut_plot, pdf, 280, 30)
+        renderPDF.draw(donut_plot, pdf, 250, 30)
         
         
         #Add small watermark
         pdf.setFont("Helvetica", 8)
         pdf.setFillColorRGB(0.5,0.5,0.5)  
-        pdf.drawString(470,7, "Report generated by NeuroUtils library")
+        pdf.drawString(455,7, "Report generated by NeuroUtils library")
         
         
         pdf.save()
