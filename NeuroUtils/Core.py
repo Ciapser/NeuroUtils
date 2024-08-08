@@ -306,7 +306,7 @@ class Utils:
             if contains_all_files:
                 folders.append(item)
                 
-        Data_path = os.path.join(analysis_folder_directory,"Data.csv")
+        Data_path = os.path.join(analysis_folder_directory,"Data.feather")
         #Create dataframe with analysys if it does not exists yet
         if not os.path.isfile(Data_path):
             c = ["Model_ID",
@@ -343,7 +343,7 @@ class Utils:
                  ]
             Data = pd.DataFrame(columns = c)
         else:
-            Data = pd.read_csv(Data_path)
+            Data = pd.read_feather(Data_path)
 
         #Determine if this model is already present in the data
         for model in folders:
@@ -534,28 +534,12 @@ class Utils:
                 tf.keras.backend.clear_session()
                 gc.collect()
                 #At the end of Data creation
-                Data.to_csv(Data_path,index = False)    
+                Data.to_feather(Data_path)    
         
         ####################################################################################################
-        try:
-            Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
-                                                      'Train_y_pred': pd.eval,
-                                                      'Val_y_true': pd.eval,
-                                                      'Val_y_pred': pd.eval,
-                                                      'Test_y_true': pd.eval,
-                                                      'Test_y_pred': pd.eval
-                                                      })
-        except:
-            try:
-                Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
-                                                          'Train_y_pred': pd.eval,
-                                                          'Val_y_true': pd.eval,
-                                                          'Val_y_pred': pd.eval
-                                                          })
-            except:
-                Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
-                                                          'Train_y_pred': pd.eval
-                                                          })
+        Data = pd.read_feather(Data_path)
+        
+
 
 
         #Calculate accuracy
@@ -573,8 +557,7 @@ class Utils:
 
             
             train_metrics = ml.General.calculate_main_metrics(y_true_one_hot = train_y_true,
-                                                              y_pred_prob_one_hot = train_y_pred
-                                                              )
+                                                              y_pred_prob_one_hot = train_y_pred)
             #Calculating ROC metrics
             train_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = train_y_true,
                                                                                 y_pred = train_y_pred
@@ -587,7 +570,7 @@ class Utils:
             #Val data
             val_y_true = Data["Val_y_true"][i]
             val_y_pred = Data["Val_y_pred"][i]
-            if isinstance(val_y_true, list):
+            if isinstance(val_y_true, np.ndarray):
                 val_y_true = ml.General.OneHot_decode(val_y_true,n_classes)
                 val_y_pred = ml.General.OneHot_decode(val_y_pred,n_classes)
                 
@@ -607,7 +590,7 @@ class Utils:
             #Test data
             test_y_true = Data["Test_y_true"][i]
             test_y_pred = Data["Test_y_pred"][i]
-            if isinstance(test_y_true, list):
+            if isinstance(test_y_true, np.ndarray):
                 test_y_true = ml.General.OneHot_decode(test_y_true,n_classes)
                 test_y_pred = ml.General.OneHot_decode(test_y_pred,n_classes)
                 
