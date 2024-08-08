@@ -330,11 +330,14 @@ class Utils:
                   
                  "Loss_train",
                  "Loss_val",
+                 "Loss_test",
                  
                  "Train_y_true",
                  "Train_y_pred",
                  "Val_y_true",
                  "Val_y_pred",
+                 "Test_y_true",
+                 "Test_y_pred",
                  
                  "Additional_info"
                  ]
@@ -430,6 +433,8 @@ class Utils:
                 except:
                     print("No train set found")
                     Loss_train = None
+                    train_y_pred = None
+                    train_y_true = None
 
 
                 try:
@@ -446,6 +451,25 @@ class Utils:
                 except:
                     print("No validation set found")
                     Loss_val = None
+                    val_y_pred = None
+                    val_y_true = None
+                    
+                try:
+                    x_test = (np.load(os.path.join(processed_data_dir,"x_test.npy"))/255).astype(Img_Dtype)
+                    y_test = np.load(os.path.join(processed_data_dir,"y_test.npy"))
+                    print("Calculating test loss...")
+                    Loss_test,_ = Keras_model.evaluate(x_test,y_test)
+                    
+                    test_y_true = np.argmax(y_test,axis = 1).astype(int).tolist()
+                    
+                    test_y_pred = Keras_model.predict(x_test)
+                    test_y_pred = np.argmax(test_y_pred,axis = 1).astype(int).tolist()
+
+                except:
+                    print("No test set found")
+                    Loss_test = None
+                    test_y_pred = None
+                    test_y_true = None
 
                     
 
@@ -486,11 +510,14 @@ class Utils:
                                   
                                     Loss_train,
                                     Loss_val,
+                                    Loss_test,
                                     
                                     train_y_true,
                                     train_y_pred,
                                     val_y_true,
                                     val_y_pred,
+                                    test_y_true,
+                                    test_y_pred,
 
                                     Additional_info
                                   ]
@@ -499,9 +526,9 @@ class Utils:
                 
                 
                 
-                del x_train,y_train,x_val,y_val
-                del Model_WorkName, Model_Parameters, Model_Dtype, Batch_Size, Epochs_Trained, Epochs_toBest,Optimizer_data,Loss_type
-                del N_classes,Img_number,Aug_mark,Img_Dtype,Form,Img_H,Img_W,Loss_train,Loss_val,Additional_info
+                #del x_train,y_train,x_val,y_val
+                #del Model_WorkName, Model_Parameters, Model_Dtype, Batch_Size, Epochs_Trained, Epochs_toBest,Optimizer_data,Loss_type
+                #del N_classes,Img_number,Aug_mark,Img_Dtype,Form,Img_H,Img_W,Loss_train,Loss_val,Additional_info
                                     
             
                 tf.keras.backend.clear_session()
@@ -510,16 +537,31 @@ class Utils:
                 Data.to_csv(Data_path,index = False)    
         
         ####################################################################################################
-        Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
-                                                  'Train_y_pred': pd.eval,
-                                                  'Val_y_true': pd.eval,
-                                                  'Val_y_pred': pd.eval
-                                                  })
+        try:
+            Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
+                                                      'Train_y_pred': pd.eval,
+                                                      'Val_y_true': pd.eval,
+                                                      'Val_y_pred': pd.eval,
+                                                      'Test_y_true': pd.eval,
+                                                      'Test_y_pred': pd.eval
+                                                      })
+        except:
+            try:
+                Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
+                                                          'Train_y_pred': pd.eval,
+                                                          'Val_y_true': pd.eval,
+                                                          'Val_y_pred': pd.eval
+                                                          })
+            except:
+                Data = pd.read_csv(Data_path, converters={'Train_y_true': pd.eval,
+                                                          'Train_y_pred': pd.eval
+                                                          })
 
 
         #Calculate accuracy
         train_models_high_level_metrics = {}
         val_models_high_level_metrics = {}
+        test_models_high_level_metrics = {}
         for i in range(len(Data)):
             n_classes = Data["N_classes"][i]
             #Train data
@@ -545,18 +587,43 @@ class Utils:
             #Val data
             val_y_true = Data["Val_y_true"][i]
             val_y_pred = Data["Val_y_pred"][i]
-            
-            val_y_true = ml.General.OneHot_decode(val_y_true,n_classes)
-            val_y_pred = ml.General.OneHot_decode(val_y_pred,n_classes)
-            
-            val_metrics = ml.General.calculate_main_metrics(y_true_one_hot = val_y_true,
-                                                              y_pred_prob_one_hot = val_y_pred
-                                                              )
-            
-            val_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = val_y_true,
-                                                                                y_pred = val_y_pred
-                                                                                )
-            val_models_high_level_metrics[Data["Model_ID"][i]] = val_metrics
+            if isinstance(val_y_true, list):
+                val_y_true = ml.General.OneHot_decode(val_y_true,n_classes)
+                val_y_pred = ml.General.OneHot_decode(val_y_pred,n_classes)
+                
+                val_metrics = ml.General.calculate_main_metrics(y_true_one_hot = val_y_true,
+                                                                  y_pred_prob_one_hot = val_y_pred
+                                                                  )
+                
+                val_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = val_y_true,
+                                                                                    y_pred = val_y_pred
+                                                                                    )
+                val_models_high_level_metrics[Data["Model_ID"][i]] = val_metrics
+            else:
+                val_models_high_level_metrics[Data["Model_ID"][i]] = {key: 0 for key in train_models_high_level_metrics[Data["Model_ID"][i]]}
+                n = len(train_models_high_level_metrics[Data["Model_ID"][i]]["ROC_scores"][1])
+                val_models_high_level_metrics[Data["Model_ID"][i]]["ROC_scores"] = (0,[0 for i in range(n)])
+        
+            #Test data
+            test_y_true = Data["Test_y_true"][i]
+            test_y_pred = Data["Test_y_pred"][i]
+            if isinstance(test_y_true, list):
+                test_y_true = ml.General.OneHot_decode(test_y_true,n_classes)
+                test_y_pred = ml.General.OneHot_decode(test_y_pred,n_classes)
+                
+                test_metrics = ml.General.calculate_main_metrics(y_true_one_hot = test_y_true,
+                                                                  y_pred_prob_one_hot = test_y_pred
+                                                                  )
+                
+                test_metrics["ROC_scores"] = ml.General.compute_multiclass_roc_auc(y_true = test_y_true,
+                                                                                    y_pred = test_y_pred
+                                                                                    )
+                test_models_high_level_metrics[Data["Model_ID"][i]] = test_metrics
+            else:
+                test_models_high_level_metrics[Data["Model_ID"][i]] = {key: 0 for key in train_models_high_level_metrics[Data["Model_ID"][i]]}
+                n = len(train_models_high_level_metrics[Data["Model_ID"][i]]["ROC_scores"][1])
+                test_models_high_level_metrics[Data["Model_ID"][i]]["ROC_scores"] = (0,[0 for i in range(n)])
+
             
 
 
@@ -580,6 +647,16 @@ class Utils:
         v_f2 =[]
         v_bal_acc = []
         v_ROC_AUC = []
+        #Test lists
+        test_acc = []
+        test_prec = []
+        test_rec = []
+        test_spec = []
+        test_f05 = []
+        test_f1 = []
+        test_f2 =[]
+        test_bal_acc = []
+        test_ROC_AUC = []
         
         harmonic_ov = []
         
@@ -614,13 +691,25 @@ class Utils:
             v_bal_acc.append(val_models_high_level_metrics[model]['balanced_accuracy'])
             v_ROC_AUC.append(val_models_high_level_metrics[model]['ROC_scores'][0])
             
+            #Test data
+            test_acc.append(test_models_high_level_metrics[model]['accuracy'])
+            test_prec.append(test_models_high_level_metrics[model]['precision'])
+            test_rec.append(test_models_high_level_metrics[model]['recall'])
+            test_spec.append(test_models_high_level_metrics[model]['specificity'])
+            
+            test_f05.append(test_models_high_level_metrics[model]['f0_5_score'])
+            test_f1.append(test_models_high_level_metrics[model]['f1_score'])
+            test_f2.append(test_models_high_level_metrics[model]['f2_score'])
+            
+            test_bal_acc.append(test_models_high_level_metrics[model]['balanced_accuracy'])
+            test_ROC_AUC.append(test_models_high_level_metrics[model]['ROC_scores'][0])
+                
             #Overtraining_data
-            acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['accuracy'], val_models_high_level_metrics[model]['accuracy']))
-            bal_acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['balanced_accuracy'], val_models_high_level_metrics[model]['balanced_accuracy']))
-            f1_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['f1_score'], val_models_high_level_metrics[model]['f1_score']))
+            acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['accuracy'], val_models_high_level_metrics[model]['accuracy']))+1e-10
+            bal_acc_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['balanced_accuracy'], val_models_high_level_metrics[model]['balanced_accuracy']))+1e-10
+            f1_ov = (ml.General.compute_overtrain_metric(train_models_high_level_metrics[model]['f1_score'], val_models_high_level_metrics[model]['f1_score']))+1e-10
            
             harmonic_ov_mean = np.array([acc_ov,bal_acc_ov,f1_ov])
-            
             harmonic_ov_mean = len(harmonic_ov_mean) / np.sum(1/harmonic_ov_mean)
             
             
@@ -664,7 +753,7 @@ class Utils:
 
             x_labels.append(Plot_label)
             
-        #Plot dta for train
+        #Plot data for train
         t_models_basic_metrics = {
             'Accuracy': t_acc,
             'Precision': t_prec,
@@ -683,7 +772,7 @@ class Utils:
             'ROC_AUC': t_ROC_AUC,
         }
         
-        #Plot dta for val v_
+        #Plot data for val
         v_models_basic_metrics = {
             'Accuracy': v_acc,
             'Precision': v_prec,
@@ -702,6 +791,28 @@ class Utils:
             'ROC_AUC': v_ROC_AUC,
         }
         
+        #Plot data for test
+        test_models_basic_metrics = {
+            'Accuracy': test_acc,
+            'Precision': test_prec,
+            'Recall': test_rec,
+            'Specificity': test_spec
+        }
+        
+        test_models_f_scores = {
+            'F05_score': test_f05,
+            'F1_score': test_f1,
+            'F2_score': test_f2,
+        }
+        
+        test_Balanced_metrics = {
+            'Balanced_accuracy': test_bal_acc,
+            'ROC_AUC': test_ROC_AUC,
+        }
+        
+        
+        
+        #Another metrics data
         Another_metrics = {
             'Harmonic_overtrain': harmonic_ov
 
@@ -741,7 +852,39 @@ class Utils:
                            clean_title = True,
                            round_data = False)
         
-#!!!
+        #Test plots
+        Utils.Analysis_plot(metrics_train = test_models_basic_metrics,
+                           metrics_val = None,
+                           x_labels = x_labels,
+                           plot_title = "Test Basic metrics",
+                           save_plots = save_plots,
+                           show_plots =show_plots,
+                           clean_title = True,
+                           maximum_y = 1)
+
+        
+        Utils.Analysis_plot(metrics_train = test_models_f_scores,
+                           metrics_val = None,
+                           x_labels = x_labels,
+                           plot_title = "Test F scores",
+                           save_plots = save_plots,
+                           show_plots =show_plots,
+                           clean_title = True,
+                           maximum_y = 1)
+        
+        Utils.Analysis_plot(metrics_train = test_Balanced_metrics,
+                           metrics_val = None,
+                           x_labels = x_labels,
+                           plot_title = "Test Inbalance resistant metrics",
+                           save_plots = save_plots,
+                           show_plots =show_plots,
+                           clean_title = True,
+                           maximum_y = 1)
+        
+        
+        
+        
+        
         ####################################
         #Analysis metrics over training
         print("\n\n")
