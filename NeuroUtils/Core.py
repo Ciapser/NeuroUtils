@@ -171,8 +171,8 @@ class Utils:
     
     
         ##########################################################################################    
-    def Analysis_over_train(self,models_metric, val_models_metric, x_labels, plot_title, 
-                                             show_plots, save_plots, 
+    def Analysis_over_train(models_metric, val_models_metric, x_labels, plot_title, 
+                                             show_plots, save_plots, analysis_folder_path = "Analysis", 
                                              window_length=20, polyorder=2,min_y = 0,max_y = 1):
         """
         Plot smoothed training and validation accuracy for multiple models and highlight the maximum value.
@@ -197,7 +197,6 @@ class Utils:
         
         for i, (train_acc, val_acc) in enumerate(zip(models_metric, val_models_metric)):
             epochs = np.arange(0, len(train_acc))
-            
             # Adjust window length if it is larger than the number of data points for training data
             if window_length >= len(train_acc):
                 window_length = len(train_acc) if len(train_acc) % 2 != 0 else len(train_acc) - 1
@@ -205,13 +204,13 @@ class Utils:
             # Adjust window length if it is larger than the number of data points for validation data
             if window_length >= len(val_acc):
                 window_length = len(val_acc) if len(val_acc) % 2 != 0 else len(val_acc) - 1
-            
+
             # Smoothing the training data using Savitzky-Golay filter
             train_acc_smoothed = savgol_filter(train_acc, window_length=window_length, polyorder=polyorder)
-            
+
             # Smoothing the validation data using Savitzky-Golay filter
             val_acc_smoothed = savgol_filter(val_acc, window_length=window_length, polyorder=polyorder)
-            
+
             # Find the maximum value and its epoch for training data
             max_train_val = np.max(train_acc)
             max_train_epoch = np.argmax(train_acc) 
@@ -264,7 +263,8 @@ class Utils:
             plt.show()
         if save_plots:
             file_name = plot_title + ".png"
-            history_plots_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Train_history_plots")
+
+            history_plots_path = os.path.join(analysis_folder_path,"Train_history_plots")
             if not os.path.isdir(history_plots_path):
                 os.makedirs(history_plots_path)
             basic_metrics_path = os.path.join(history_plots_path, file_name)
@@ -273,7 +273,7 @@ class Utils:
         if not show_plots:
             plt.close()    
     
-    
+
     def Models_analysis(models_directory = "Models_saved",analysis_folder_directory = "Analysis",processed_data_folder = "DataSet_Processed" , show_plots = False, save_plots = True):
         current_script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
         if models_directory == "Models_saved":
@@ -741,13 +741,13 @@ class Utils:
                            clean_title = True,
                            round_data = False)
         
-        """
+#!!!
         ####################################
         #Analysis metrics over training
         print("\n\n")
         print("Training history analysis...")
 
-        Train_history_path = os.path.join(self.PROJECT_DIRECTORY,"Analysis","Train_history_Data.feather")
+        Train_history_path = os.path.join(analysis_folder_directory,"Train_history_Data.feather")
         #Create dataframe with analysys if it does not exists yet
         if not os.path.isfile(Train_history_path):
             c = ['Model_ID',
@@ -781,7 +781,7 @@ class Utils:
         for model in folders:
             print("----------------------------------------------------------------------------")
             print("Model: ",model)
-            Model_history = pd.read_csv(os.path.join(self.PROJECT_DIRECTORY,"Models_saved",model,"Model_history.csv"))
+            Model_history = pd.read_csv(os.path.join(models_directory,model,"Model_history.csv"))
             if Train_history_Data["Model_ID"].isin([model]).any():
                 print("Model present in Data")
                 #To update if epochs has been changed
@@ -804,9 +804,16 @@ class Utils:
 
 
             if fill_data:
+                param_path = os.path.join(models_directory,model,"Model_parameters.json")
+                with open(param_path, 'r') as json_file:
+                    param_data = json.load(json_file)
+                    
+                N_classes = param_data["Number of Classes"]
 
-                metric_path = os.path.join(self.PROJECT_DIRECTORY,'Models_saved',model ,"Model_metrics.csv")
+                metric_path = os.path.join(models_directory,model ,"Model_metrics.csv")
                 model_metrics = pd.read_csv(metric_path)
+
+                
                 
                 for col in model_metrics.columns:
                     if col != "epoch":
@@ -839,8 +846,8 @@ class Utils:
                     train_true = model_metrics['train_true'][k]
                     train_pred = model_metrics['train_pred'][k]
                     
-                    train_true = ml.General.OneHot_decode(train_true, self.N_CLASSES)
-                    train_pred = ml.General.OneHot_decode(train_pred, self.N_CLASSES)
+                    train_true = ml.General.OneHot_decode(train_true, N_classes)
+                    train_pred = ml.General.OneHot_decode(train_pred, N_classes)
                     
                     train_calc_metrics = ml.General.calculate_main_metrics(train_true, train_pred)
 
@@ -861,8 +868,8 @@ class Utils:
                     val_true = model_metrics['val_true'][k]
                     val_pred = model_metrics['val_pred'][k]
                     
-                    val_true = ml.General.OneHot_decode(val_true, self.N_CLASSES)
-                    val_pred = ml.General.OneHot_decode(val_pred, self.N_CLASSES)
+                    val_true = ml.General.OneHot_decode(val_true, N_classes)
+                    val_pred = ml.General.OneHot_decode(val_pred, N_classes)
                     
                     val_calc_metrics = ml.General.calculate_main_metrics(val_true, val_pred)
 
@@ -1024,23 +1031,24 @@ class Utils:
                                          "Specificity",
                                          "Balanced_accuracy",
                                          "ROC_AUC"]
-            
+        #return plot_train_merged_metrics     
         for j in range(len(plot_train_merged_metrics)):      
             mn_y =0             
             if merged_titles[j] == "Specificity":
-                mn_y = 1-(1/self.N_CLASSES)
+                mn_y = 1-(1/N_classes)
             if merged_titles[j] == "ROC_AUC":
                 mn_y = 0.5
-    
-            self.Analysis_over_train(models_metric =plot_train_merged_metrics[j],
-                                     val_models_metric = plot_val_merged_metrics[j],
-                                     x_labels = x_labels,
-                                     plot_title = merged_titles[j],
-                                     show_plots = show_plots,
-                                     save_plots = save_plots,
-                                     min_y = mn_y
-                                     )
-        """
+
+            Utils.Analysis_over_train(models_metric = plot_train_merged_metrics[j],
+                                val_models_metric = plot_val_merged_metrics[j],
+                                x_labels = x_labels,
+                                plot_title = merged_titles[j], 
+                                show_plots = show_plots,
+                                save_plots = save_plots,
+                                analysis_folder_path = analysis_folder_directory ,
+                                min_y = mn_y
+                                )
+
     
     
     
