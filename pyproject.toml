@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "NeuroUtils"
-version = "0.1.9"
+version = "0.2.0"
 description = "Library for neural network projects organisation"
 authors = [{name = "Sebastian Borukało", email = "Ciapserr@gmail.com"}]
 readme = "README.txt"
@@ -21,3 +21,11 @@ dependencies = {file = ["requirements.txt"]}
 
 [project.urls]
 Homepage = "https://github.com/Ciapser/NeuroUtils"
+
+# Include all files in the Assets folder
+[tool.setuptools.package-data]
+"NeuroUtils" = ["Assets/**/*"]
+
+# Ensure that package data is included
+[tool.setuptools]
+packages = ["NeuroUtils"]

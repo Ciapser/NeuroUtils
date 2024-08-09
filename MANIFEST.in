@@ -1,0 +1,2 @@
+# Include all files in the Assets directory
+recursive-include neuro_utils/Assets *
