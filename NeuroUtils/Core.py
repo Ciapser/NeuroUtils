@@ -36,6 +36,7 @@ from reportlab.graphics import renderPDF
 from svglib.svglib import svg2rlg
 import io
 from reportlab.lib.utils import ImageReader
+from texttable import Texttable
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
@@ -2250,7 +2251,65 @@ class Project:
             
             
         def __str__(self):
-            return "NO DESCRIPTION"
+            #Arch name
+            try:
+                arch_name = self.ARCHITECTURE_NAME
+            except:
+                arch_name = " ----- "
+            #Optimizer   
+            try:
+                optimizer = self.MODEL.optimizer._name
+            except:
+                optimizer = " ----- "
+                
+            #Batch_size
+            try:
+                batch_size = self.BATCH_SIZE
+            except:
+                batch_size = " ----- "    
+            
+            #total imgs
+            try:
+                try:
+                    total_img = len(self.Y_TRAIN) + len(self.Y_VAL) + len(self.Y_TEST)
+                except:
+                    try:
+                        total_img = len(self.Y_TRAIN) + len(self.Y_VAL)
+                    except:
+                        try:
+                            total_img = len(self.Y_TRAIN)
+                        except:
+                            total_img = " ----- " 
+                            
+            except:
+                total_img = " ----- "      
+            
+            #Form
+            try:
+                form = self.FORM
+            except:
+                form = " ----- "
+            
+            #Resolution    
+            try:
+                h = self.IMG_H
+                w = self.IMG_W
+                h_w = str(h)+"x"+str(w)
+            except:
+                h_w = " ----- "
+            
+            
+            t = Texttable()
+            t.add_rows([ ["Attribute", 'Value'],
+                        ['Architecture name', arch_name],
+                        ['Optimizer', optimizer],
+                        ['Batch_size', batch_size],
+                        ["Total images", total_img],
+                        ['Resolution', h_w],
+                        ['Form', form]
+                        ])
+            #print(t.draw())
+            return t.draw()
             
     
         def Initialize_data(self,Img_Height,Img_Width,Grayscale = False,CSV_Load = False): 
