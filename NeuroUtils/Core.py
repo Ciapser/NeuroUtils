@@ -864,7 +864,7 @@ class Utils:
                            clean_title = True,
                            maximum_y = 1)
         
-        
+
         
         
         
@@ -1052,6 +1052,13 @@ class Utils:
         #Converting strings to actuall lists in the data
         Train_history_Data = pd.read_feather(Train_history_path)    
         
+        #Loading parameters and N_classes again in case there is no new data and params were not loaded
+        param_path = os.path.join(models_directory,model,"Model_parameters.json")
+        with open(param_path, 'r') as json_file:
+            param_data = json.load(json_file)
+            
+        N_classes = param_data["Number of Classes"]
+        
 
 
 
@@ -1157,7 +1164,8 @@ class Utils:
                                          "Specificity",
                                          "Balanced_accuracy",
                                          "ROC_AUC"]
-        #return plot_train_merged_metrics     
+        #return plot_train_merged_metrics    
+
         for j in range(len(plot_train_merged_metrics)):      
             mn_y =0             
             if merged_titles[j] == "Specificity":
@@ -1175,7 +1183,7 @@ class Utils:
                                 min_y = mn_y
                                 )
 
-    
+
     
     
     def Generate_model_pdf(model_hash,model_params, background_path,file_path):
@@ -1424,7 +1432,7 @@ class Utils:
         width, height = A4
         
         # Draw the background image
-        #pdf.drawImage(background_path, 0, 0, width=width, height=height)
+        pdf.drawImage(background_path, 0, 0, width=width, height=height)
         
         # Set the transparency for the background image (if needed)
         pdf.setFillColorRGB(1, 1, 1, alpha=0.1)
@@ -2155,6 +2163,8 @@ class Utils:
                 
         except:
             print("No train set provided, skipping...")
+            #Closing opened plot if there is no set
+            plt.close()
                    
         try:
             #Create confusion matrix
@@ -2175,6 +2185,8 @@ class Utils:
                 plt.close()
         except:
             print("No validation set provided, skipping...")    
+            #Closing opened plot if there is no set
+            plt.close()
             
         try:
             #Create confusion matrix
@@ -2195,6 +2207,8 @@ class Utils:
                 plt.close()
         except:
             print("No test set provided, skipping...")
+            #Closing opened plot if there is no set
+            plt.close()
         
     
         if evaluate:
