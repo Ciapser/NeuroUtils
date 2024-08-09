@@ -2539,11 +2539,11 @@ class Project:
                 #Save model architecture only so it can be retrieved in future
                 ml.General.save_model_as_json(model = Model, filename = model_json_directory)
                 print("Model architecture JSON template saved")
-            
+            bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"Assets","Background.png" )
             #Create and save pdf of model
             Utils.Generate_model_pdf(model_hash = f_name,
                                      model_params = content,
-                                     background_path = r"C:\Users\Stacja_Robocza\Desktop\NeuroUtils\Assets\Background.png",
+                                     background_path = bg_path,
                                      file_path = os.path.join(self.MODEL_DIRECTORY , "Model_preview.pdf")
                                      )
 

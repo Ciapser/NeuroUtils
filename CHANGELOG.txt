@@ -1,4 +1,18 @@
 =====================================================================================
+Version 0.1.9
+Hash update
+
+Changed way models are saved, now they are stored in hashed directory which is unique to
+every combination of given parameters defining model. It allows to easy modify these elements 
+with ability to distinguish models and compare them effectively. Added analysis module allowing for 
+quick model performance inspection, as well as its training. 
+Added small changes and functions like:
+-model pdf generator
+-adopted feather as replacement for csv in some dataframe functions
+-basic object info by print
+-fixed small bugs occuring while renewing model training
+-added new parameters such as train/val/test dataset regulation
+=====================================================================================
 Version 0.1.8
 Interpolation addon
 
