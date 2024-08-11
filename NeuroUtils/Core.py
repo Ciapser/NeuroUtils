@@ -1367,7 +1367,7 @@ class Utils:
             # Draw the pointer line
             pdf.line(pointer_start_x, pointer_start_y, pointer_x, pointer_y)
             
-            
+        database_name = model_params["Database name"]   
         model_work_name = model_params["User Architecture Name"]
         total_params = model_params["Total Parameters"]
         layer_number = model_params["Number of Layers"]
@@ -1565,35 +1565,43 @@ class Utils:
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 120, "Image height: ")
+        pdf.drawString(column_2, height - 120, "DataBase name: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 120, img_h)
+        pdf.drawString(column_2+column_2_space, height - 120, database_name)
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 140, "Image width: ")
+        pdf.drawString(column_2, height - 140, "Image height: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 140, img_w)
+        pdf.drawString(column_2+column_2_space, height - 140, img_h)
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 160, "Image color: ")
+        pdf.drawString(column_2, height - 160, "Image width: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 160, img_color)
+        pdf.drawString(column_2+column_2_space, height - 160, img_w)
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 180, "Image dataType: ")
+        pdf.drawString(column_2, height - 180, "Image color: ")
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 180, img_dataType)
+        pdf.drawString(column_2+column_2_space, height - 180, img_color)
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 200, "Image dataType: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 200, img_dataType)
         
         
         supt_size = 13
@@ -1612,7 +1620,15 @@ class Utils:
         
         pdf.setFont("Arial-Black", supt_size)
         pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 320, "Unmodified/Augmented: ")
+        pdf.drawString(column_2, height - 320, "Train data augm. ratio: ")
+        
+        pdf.setFont("Helvetica", supt_size)
+        pdf.setFillColorRGB(r,g,b)  
+        pdf.drawString(column_2+column_2_space, height - 320, str(augm))
+        
+        pdf.setFont("Arial-Black", supt_size)
+        pdf.setFillColor(colors.black)  
+        pdf.drawString(column_2, height - 340, "Unmodified/Augmented: ")
         
         modified = int(sum([c*(1-val_split-test_split) for c in class_size]))
         modified = int(modified*(augm-1))
@@ -1623,7 +1639,7 @@ class Utils:
         
         pdf.setFont("Helvetica", supt_size)
         pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 320, unmodified+"/"+modified)
+        pdf.drawString(column_2+column_2_space, height - 340, unmodified+"/"+modified)
         
         
 
@@ -1652,7 +1668,7 @@ class Utils:
         
         image = ImageReader(buffer)
         
-        pdf.drawImage(image, column_2, 450)
+        pdf.drawImage(image, column_2, 430)
         
         train_middle = (bar_width*(1-val_split-test_split))/2+column_2
         val_middle = bar_width*(1-val_split-test_split +val_split/2)+column_2
@@ -1673,7 +1689,7 @@ class Utils:
                                name = "Train:  ",
                                variable = str(int(round((1-val_split-test_split)*100,2)))+"%",
                                pointer_x = train_middle,
-                               pointer_y = 449,
+                               pointer_y = 429,
                                horizontal = h,
                                vertical = "up",
                                left_border = column_2,
@@ -1695,7 +1711,7 @@ class Utils:
                                    name = "Val:  ",
                                    variable = str(int(round(val_split*100,2)))+"%",
                                    pointer_x = val_middle,
-                                   pointer_y = 449,
+                                   pointer_y = 429,
                                    horizontal = h,
                                    vertical = "up",
                                    left_border = column_2,
@@ -1707,7 +1723,7 @@ class Utils:
                                    name = "Test:  ",
                                    variable = str(int(round(test_split*100,2)))+"%",
                                    pointer_x = test_middle,
-                                   pointer_y = 451,
+                                   pointer_y = 431,
                                    horizontal = "left",
                                    vertical = "down",
                                    left_border = column_2,
@@ -1737,7 +1753,7 @@ class Utils:
         buffer.seek(0)
         
         image = ImageReader(buffer)
-        pdf.drawImage(image, column_2, 370)
+        pdf.drawImage(image, column_2, 350)
 
         if aug_data_part == 0:
             h = "right"
@@ -1755,7 +1771,7 @@ class Utils:
                                name = "Train:  ",
                                variable = str(int(round(real_data_part*100,2)))+"%",
                                pointer_x = real_middle,
-                               pointer_y = 369,
+                               pointer_y = 349,
                                horizontal = h,
                                vertical = "up",
                                left_border = column_2,
@@ -1770,7 +1786,7 @@ class Utils:
                                    name = "Train Aug:    ",
                                    variable = str(int(round(aug_data_part*100,2)))+"%",
                                    pointer_x = aug_middle,
-                                   pointer_y = 371,
+                                   pointer_y = 351,
                                    horizontal = h,
                                    vertical = "down",
                                    left_border = column_2,
@@ -1781,7 +1797,7 @@ class Utils:
         
         
         donut_plot = create_donut_chart(classes =classes , sizes = class_size, scale = 0.3)
-        renderPDF.draw(donut_plot, pdf, 250, 30)
+        renderPDF.draw(donut_plot, pdf, 250, 20)
         
         
         #Add small watermark
@@ -2486,11 +2502,11 @@ class Project:
             batch_size = self.BATCH_SIZE
             optimizer_params = str(Model.optimizer.get_config())
             loss = Model.loss
-            
+            database_name = os.path.basename(os.path.normpath(self.DATABASE_DIRECTORY))
 
-            
             # Create the content for the text file
             content = {
+                "Database name": database_name,
                 "Number of Classes": n_classes,
                 "Class Size": class_size,
                 "Validation split": val_split,
