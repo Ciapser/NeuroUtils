@@ -1393,10 +1393,12 @@ class Utils:
         val_split = model_params["Validation split"]
         augm = find_number_after_m(model_params["Augmentation Mark"])
         def raw_class_size(class_size,v_split,t_split,aug):
-            raw_class = class_size/((1-v_split-t_split)*aug+v_split)
+            raw_class = class_size/((1-v_split-t_split)*aug+v_split+t_split)
             return raw_class
         
+
         class_size  = [raw_class_size(c[1],val_split,test_split,augm) for c in model_params["Class Size"]]
+
         classes = [c[0] for c in model_params["Class Size"]]
 
         dataset_size = int(sum([c*(augm*(1-val_split-test_split)+val_split+test_split) for c in class_size]))
