@@ -2534,6 +2534,10 @@ class Project:
             model_directory = os.path.join("Models_saved", str(f_name))
             self.MODEL_DIRECTORY = model_directory
             
+            if not os.path.exists("Models_saved"):
+                print("Created model folder")
+                os.mkdir("Models_saved")
+                
             if not os.path.exists(model_directory):
                 print("Model Created")
                 os.mkdir(model_directory)
