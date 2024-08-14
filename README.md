@@ -1,5 +1,5 @@
 
-![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Logo_with_name_bg.svg?raw=true)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Logo_with_name.svg?raw=true)
 # Modular DL project organizer
 
 
@@ -36,14 +36,17 @@ To start using library you need to create the script in chosen folder, and run i
 ##### Below is simple instruction through the steps
 
 #### Importing library:
-    from NeuroUtils import Core
-    from NeuroUtils import Architectures
-    #Eventually if you want to go deeper, there is library section  with  more basic functions:
-    from NeuroUtils import ML_assets as ml
-
+```python
+from NeuroUtils import Core
+from NeuroUtils import Architectures
+#Eventually if you want to go deeper, there is library section  with  more basic functions:
+from NeuroUtils import ML_assets as ml
+```
 #### Data preparation:
- Creating class of the project and setting data directory
-    Example_Project = Core.Project.Classification_Project(Database_Directory = "Your\DataBase\Folder")
+Creating class of the project and setting data directory\
+```python
+Example_Project = Core.Project.Classification_Project(Database_Directory = "Your\DataBase\Folder")
+```
     
     
     
