@@ -38,7 +38,7 @@ General idea behind the project is to reduce data processing time and to manage 
 To start using library you need to create the script in chosen folder, and run it. Necessary folders will be created automatically. 
 ##### Below is simple instruction through the steps
 
-#### Importing library:
+#### **Importing library**:
 ```python
 from NeuroUtils import Core
 from NeuroUtils import Architectures
@@ -46,19 +46,19 @@ from NeuroUtils import Architectures
 from NeuroUtils import ML_assets as ml
 ```
 
-#### Project Initialization:
+#### **Project Initialization**:
 Creating class of the project and setting data directory
 ```python
 Example_Project = Core.Project.Classification_Project(Database_Directory = "Your\DataBase\Folder")
 ```
 
-#### Data preparation:
+#### **Data preparation**:
 Initializating data from main database folder to project folder 
 ```python
 Example_Project.Initialize_data(Img_Height = 32, Img_Width = 32, Grayscale = False)
 ```
 
-#### Data processing:
+#### **Data processing**:
 Loading prepared data and processing it
 ```python
 #Loading and merging data to trainable dataset, with optional reduction of the size class
@@ -79,7 +79,7 @@ x_train, y_train, x_val, y_val,x_test,y_test = Example_Project.Process_data(X = 
                                                                             )
 ```
     
-#### Data injection:
+#### **Data injection**:
 Saving data into class
 ```python
 Example_Project.Save_Data(x_train = x_train,
@@ -92,7 +92,7 @@ Example_Project.Save_Data(x_train = x_train,
                           )
 ```   
 
-#### Model Preparation:
+#### **Model Preparation**:
 There are several architectures in the library, however **its reccomended to use own architecture**, or import it from another library (tensorflow,keras etc.), as these present in the "Architectures" module are not well tested and are used mainly for testing.
 ```python
 h = Example_Project.IMG_H
@@ -107,7 +107,7 @@ model = Architectures.Img_Classification.AnimalNet_v32(shape = (h,w,c), n_classe
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 ```    
 
-#### Training model:
+#### **Training model**:
 #Training of the model. It can load previously saved model from project folder or train from scratch.
 ```python
 model = Example_Project.Initialize_weights_and_training(Model = model,
@@ -124,28 +124,32 @@ model = Example_Project.Initialize_weights_and_training(Model = model,
                                                         )
 ```  
     
-#### Model Evaluation:
+#### **Model Evaluation**:
 Showing and saving basic results of the current training session
 ```python
 Example_Project.Initialize_results(show_plots = False, save_plots = True, Evaluate = False)
 ```    
 
-#### Model Analysis:
+#### **Model Analysis**:
 Performing high detail analysis of all models trained
 ```python
 Core.Utils.Models_analysis(show_plots = False, save_plots = True)
 ```  
 ## Results
 - **F scores analysis plots** [![Static Badge](https://img.shields.io/badge/Full_HD-F_scores_analysis-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/F_scores.png)
+
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/F_scores_reduced_size.png?raw=true)
 
 - **Train_history** [![Static Badge](https://img.shields.io/badge/Full_HD-Train_History-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Train_history.png)
+
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Train_history_reduced_size.png?raw=true)
 
 - **Confusion matrix** [![Static Badge](https://img.shields.io/badge/Full_HD-Conf_Matrix-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Confusion_matrix.png)
+
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Confusion_matrix_reduced_size.png?raw=true)
 
 - **Model PDF report** [![Static Badge](https://img.shields.io/badge/Full_HD-PDF_Report-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Model_preview.png)
+
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Model_preview_reduced_size.png?raw=true)
 
 ## **And more not shown on the images**:
