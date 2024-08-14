@@ -1,6 +1,6 @@
 
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Logo_with_name.svg?raw=true)
-# Modular DL project organizer
+# Modular Deep Learning project organizer
 
 
 
@@ -18,6 +18,8 @@ NeuroUtils is the library which goal is to transform your ML/DL project into mod
 
 Its dedicated mostly for scientific and testing purposes and will serve you well if you want to see impact of different data, architectures and parameters configuration on your neural network model.
 
+Currently it officially supports classification problems and other ones may not be best optimized to work with. But it's planned to extend support for object detection and segmentation in the future.
+
 
 ## Idea
 
@@ -25,7 +27,7 @@ General idea behind the project is to reduce data processing time and to manage 
 **You just need to change the model as you wish, and NeuroUtils will save, and take care of it.**
 
 - When all steps are finished progress is saved and its possible to experiment with another parameters. All steps are modular and you can inspect data, model and then renew the process.
-![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Model_preview.png?raw=true) ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/FlowChart.png?raw=true)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/FlowChart_reduced_size.png?raw=true)
 
 - Library is checking if in current run, any identical steps have been performed in the past. If so, they are skipped, to save time and moves to the next step, as shown at the **Workflow chart** below.
 ![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Workflow.jpg?raw=true)
@@ -133,6 +135,30 @@ Performing high detail analysis of all models trained
 ```python
 Core.Utils.Models_analysis(show_plots = False, save_plots = True)
 ```  
+## Results
+- **F scores analysis plots** [![Static Badge](https://img.shields.io/badge/Full_HD-F_scores_analysis-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/F_scores.png)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/F_scores_reduced_size.png?raw=true)
+
+- **Train_history** [![Static Badge](https://img.shields.io/badge/Full_HD-Train_History-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Train_history.png)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Train_history_reduced_size.png?raw=true)
+
+- **Confusion matrix** [![Static Badge](https://img.shields.io/badge/Full_HD-Conf_Matrix-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Confusion_matrix.png)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Confusion_matrix_reduced_size.png?raw=true)
+
+- **Model PDF report** [![Static Badge](https://img.shields.io/badge/Full_HD-PDF_Report-green)](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Model_preview.png)
+![alt text](https://github.com/Ciapser/NeuroUtils/blob/main/ReadMe_files/Model_preview_reduced_size.png?raw=true)
+
+## **And more not shown on the images**:
+- Analysis over train,
+- Another metrics analysis
+- Model architecture preview
+- Model overfit analysis
+- Stored metadata about models for your own analysis
+- More in the future
+
+
+
+
 ## Feedback
 
 If you have any feedback about the project, you can reach me on my github profile
