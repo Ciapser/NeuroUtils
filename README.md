@@ -8,7 +8,7 @@
 
 |           |          |
 | :-------- | :------- |
-| Package   | [![Static Badge](https://img.shields.io/badge/GitHub_Version-0.2.1-purple)](https://github.com/Ciapser/NeuroUtils) [![Static Badge](https://img.shields.io/badge/PyPi%20Version-0.2.0-blue)](https://pypi.org/project/NeuroUtils/)|
+| Package   | [![Static Badge](https://img.shields.io/badge/GitHub_Version-0.2.1-purple)](https://github.com/Ciapser/NeuroUtils) [![Static Badge](https://img.shields.io/badge/PyPi%20Version-0.2.1-blue)](https://pypi.org/project/NeuroUtils/)|
 | Info      | [![Static Badge](https://img.shields.io/badge/License-Apache%202.0-green)](https://github.com/Ciapser/NeuroUtils/blob/main/LICENSE.txt)|
 
 
@@ -34,6 +34,19 @@ General idea behind the project is to reduce data processing time and to manage 
 
 
 ## Instalation
+
+For instalation use PyPi
+```
+pip install NeuroUtils
+```
+Or if you want to use not officially released version, with newest features (can be bugged)
+```
+pip install https://github.com/Ciapser/NeuroUtils
+```
+or if not working
+```
+pip install git+https://github.com/Ciapser/NeuroUtils
+```
 ## Use
 To start using library you need to create the script in chosen folder, and run it. Necessary folders will be created automatically. 
 ##### Below is simple instruction through the steps
