@@ -2501,7 +2501,14 @@ class Project:
             
             batch_size = self.BATCH_SIZE
             optimizer_params = str(Model.optimizer.get_config())
-            loss = Model.loss
+            
+            try:
+                #Scenario where loss function is custom function written by user
+                loss = str(Model.loss.__name__)
+            except:
+                #Scenario where loss function is provided by string name and is by default in tf library       
+                loss = str(Model.loss)
+            
             database_name = os.path.basename(os.path.normpath(self.DATABASE_DIRECTORY))
 
             # Create the content for the text file
