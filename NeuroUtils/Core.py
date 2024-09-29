@@ -39,6 +39,7 @@ from reportlab.lib.utils import ImageReader
 from texttable import Texttable
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+import inspect
 
 
 class Utils:
@@ -276,6 +277,10 @@ class Utils:
     
 
     def Models_analysis(models_directory = "Models_saved",analysis_folder_directory = "Analysis",processed_data_folder = "DataSet_Processed" , show_plots = False, save_plots = True):
+        if not os.path.exists(analysis_folder_directory):
+            print("Created analysis folder")
+            os.mkdir(analysis_folder_directory)
+        
         current_script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
         if models_directory == "Models_saved":
             models_directory = os.path.join(current_script_dir,"Models_saved")
@@ -374,6 +379,7 @@ class Utils:
             if fill_data:
                 
                 param_path = os.path.join(models_directory,model,"Model_parameters.json")
+                custom_path = os.path.join(models_directory,model,"Custom_objects.json")
                 with open(param_path, 'r') as json_file:
                     param_data = json.load(json_file)
 
@@ -417,9 +423,21 @@ class Utils:
                 aug_mark = param_data["Augmentation Mark"]
                 split_mark = "Val_"+str(param_data["Validation split"]) + "  Test_"+str(param_data["Test split"])
                 processed_data_dir = os.path.join(processed_data_folder,img_mark,aug_mark,split_mark)
+                ##########################
+                def load_custom_objects(custom_objects_path):
+                    with open(custom_objects_path, "r") as f:
+                        custom_objects_serialized = json.load(f)
                 
+                    custom_objects = {}
+                    for name, source_code in custom_objects_serialized.items():
+                        # Dynamically execute the source code to recreate the custom object
+                        exec(source_code, globals())
+                        custom_objects[name] = eval(name)
                 
-                Keras_model = tf.keras.models.load_model(os.path.join(models_directory,model,"Model_best.keras"))
+                    return custom_objects
+                custom_objects = load_custom_objects(custom_path)
+                ################################
+                Keras_model = tf.keras.models.load_model(os.path.join(models_directory,model,"Model_best.keras"), custom_objects = custom_objects)
                 try:
                     x_train = (np.load(os.path.join(processed_data_dir,"x_train.npy"))/255).astype(Img_Dtype)
                     y_train = np.load(os.path.join(processed_data_dir,"y_train.npy"))
@@ -2552,6 +2570,47 @@ class Project:
             params_directory = os.path.join(model_directory,"Model_parameters.json")
             model_png_directory = os.path.join(model_directory,"Model_architecture_view.png")
             model_json_directory = os.path.join(model_directory,"Model_architecture_json.json")
+            #######################################################
+            custom_obj_path = os.path.join(model_directory,"Custom_objects.json")
+
+            def save_custom_objects(model, custom_objects_path):
+                custom_objects = {}
+            
+                # Detect custom layers
+                for layer in model.layers:
+                    if not hasattr(tf.keras.layers, layer.__class__.__name__):
+                        custom_objects[layer.__class__.__name__] = inspect.getsource(layer.__class__)
+            
+                # Detect custom loss, metrics, and optimizer
+                def is_custom(obj):
+                    # If obj is a string, it is a standard Keras loss/metric/optimizer name
+                    if isinstance(obj, str):
+                        return False
+                    
+                    # If obj is callable, check if it belongs to a TensorFlow/Keras module
+                    if callable(obj):
+                        return not (obj.__module__.startswith('tensorflow.keras') or obj.__module__.startswith('keras'))
+                    
+                    return False     
+                
+                if is_custom(model.loss):
+                    custom_objects[model.loss.__name__] = inspect.getsource(model.loss)
+                if is_custom(model.optimizer):
+                    custom_objects[model.optimizer.__class__.__name__] = inspect.getsource(model.optimizer)
+                for metric in model.metrics:
+                    if is_custom(metric):
+                        custom_objects[metric.__class__.__name__] = inspect.getsource(metric)
+            
+                # Serialize and save custom objects
+                with open(custom_objects_path, "w") as f:
+                    json.dump(custom_objects, f)
+                    
+            save_custom_objects(Model, custom_obj_path)
+            
+            ######################################################
+            
+            
+            
             # Write dictionary to JSON file
             with open(params_directory, 'w') as json_file:
                 json.dump(content, json_file, indent=4)
