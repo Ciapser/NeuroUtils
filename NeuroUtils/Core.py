@@ -328,7 +328,6 @@ class Utils:
 
                  "N_classes",
                  "Img_number",
-                 "Aug_mark",
                  "Img_Dtype",
                  "Form",
                  "Img_H",
@@ -412,34 +411,28 @@ class Utils:
                     Img_number+= item[1]
                     
                     
-                Aug_mark = param_data["Augmentation Mark"]
                 Img_Dtype = param_data["Image Datatype"]
                 Form = bool(param_data["Grayscale"])
                 Form = "Grayscale" if Form else "RGB"
                 Img_H = param_data["Image Height"]
                 Img_W = param_data["Image Width"]
-                
+
+                #########
                 img_mark = str(Img_H)+"x"+str(Img_W)+"_"+Form
-                aug_mark = param_data["Augmentation Mark"]
-                split_mark = "Val_"+str(param_data["Validation split"]) + "  Test_"+str(param_data["Test split"])
-                processed_data_dir = os.path.join(processed_data_folder,img_mark,aug_mark,split_mark)
+                processing_mark = param_data["Processing Mark"]
+                normalization = param_data["Normalization"]
+                
+                proc_folder = str(str(normalization) + processing_mark)
+                #########
+                
+                processed_data_dir = os.path.join(processed_data_folder,img_mark, proc_folder) 
                 ##########################
-                def load_custom_objects(custom_objects_path):
-                    with open(custom_objects_path, "r") as f:
-                        custom_objects_serialized = json.load(f)
-                
-                    custom_objects = {}
-                    for name, source_code in custom_objects_serialized.items():
-                        # Dynamically execute the source code to recreate the custom object
-                        exec(source_code, globals())
-                        custom_objects[name] = eval(name)
-                
-                    return custom_objects
-                custom_objects = load_custom_objects(custom_path)
+
+                custom_objects = ml.General.load_custom_objects(custom_path)
                 ################################
                 Keras_model = tf.keras.models.load_model(os.path.join(models_directory,model,"Model_best.keras"), custom_objects = custom_objects)
                 try:
-                    x_train = (np.load(os.path.join(processed_data_dir,"x_train.npy"))/255).astype(Img_Dtype)
+                    x_train = np.load(os.path.join(processed_data_dir,"x_train.npy")).astype(Img_Dtype)
                     y_train = np.load(os.path.join(processed_data_dir,"y_train.npy"))
                     print("Calculating train loss...")
                     Loss_train,_ = Keras_model.evaluate(x_train,y_train)
@@ -457,7 +450,7 @@ class Utils:
 
 
                 try:
-                    x_val = (np.load(os.path.join(processed_data_dir,"x_val.npy"))/255).astype(Img_Dtype)
+                    x_val = np.load(os.path.join(processed_data_dir,"x_val.npy")).astype(Img_Dtype)
                     y_val = np.load(os.path.join(processed_data_dir,"y_val.npy"))
                     print("Calculating validation loss...")
                     Loss_val,_ = Keras_model.evaluate(x_val,y_val)
@@ -474,7 +467,7 @@ class Utils:
                     val_y_true = None
                     
                 try:
-                    x_test = (np.load(os.path.join(processed_data_dir,"x_test.npy"))/255).astype(Img_Dtype)
+                    x_test = np.load(os.path.join(processed_data_dir,"x_test.npy")).astype(Img_Dtype)
                     y_test = np.load(os.path.join(processed_data_dir,"y_test.npy"))
                     print("Calculating test loss...")
                     Loss_test,_ = Keras_model.evaluate(x_test,y_test)
@@ -521,7 +514,6 @@ class Utils:
         
                                     N_classes,
                                     Img_number,
-                                    Aug_mark,
                                     Img_Dtype,
                                     Form,
                                     Img_H,
@@ -540,6 +532,7 @@ class Utils:
 
                                     Additional_info
                                   ]
+ 
                 row_list = np.array(row_list,dtype = "object")
                 Data.loc[idx] = row_list
                 
@@ -1283,7 +1276,8 @@ class Utils:
             if match:
                 return int(match.group(1))
             else:
-                return None
+                print("Augmentation mark not in expected format! \n Assumed that augmentation is not performed --> Returned 1x multiplicator\n If dataset is augmented check augmentation mark")
+                return 1
         
         
         def sort_dict(d):
@@ -1409,20 +1403,16 @@ class Utils:
         
         test_split = model_params["Test split"]
         val_split = model_params["Validation split"]
-        augm = find_number_after_m(model_params["Augmentation Mark"])
-        def raw_class_size(class_size,v_split,t_split,aug):
-            raw_class = class_size/((1-v_split-t_split)*aug+v_split+t_split)
-            return raw_class
-        
+        #augm = find_number_after_m(model_params["Augmentation Mark"])
 
-        class_size  = [raw_class_size(c[1],val_split,test_split,augm) for c in model_params["Class Size"]]
+        class_size  = [c[1] for c in model_params["Class Size"]]
 
         classes = [c[0] for c in model_params["Class Size"]]
 
-        dataset_size = int(sum([c*(augm*(1-val_split-test_split)+val_split+test_split) for c in class_size]))
+        dataset_size = int(sum([c for c in class_size]))
         
-        real_data_part = round(sum([c/(c*augm) for c in class_size])/len(class_size),3)
-        aug_data_part = round(1-real_data_part,3)
+        real_data_part = 1
+        aug_data_part = 0
         
         
         
@@ -1640,28 +1630,7 @@ class Utils:
         pdf.setFillColor(colors.black)  
         pdf.drawString(column_2, height - 320, "Train data augm. ratio: ")
         
-        pdf.setFont("Helvetica", supt_size)
-        pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 320, str(augm))
         
-        pdf.setFont("Arial-Black", supt_size)
-        pdf.setFillColor(colors.black)  
-        pdf.drawString(column_2, height - 340, "Unmodified/Augmented: ")
-        
-        modified = int(sum([c*(1-val_split-test_split) for c in class_size]))
-        modified = int(modified*(augm-1))
-        unmodified = int(sum([c for c in class_size]))
-        
-        unmodified = str(unmodified)
-        modified = str(modified)
-        
-        pdf.setFont("Helvetica", supt_size)
-        pdf.setFillColorRGB(r,g,b)  
-        pdf.drawString(column_2+column_2_space, height - 340, unmodified+"/"+modified)
-        
-        
-
-
         bar_width = 245
         bar_height = 26
         contour = 2
@@ -1877,7 +1846,8 @@ class Utils:
                 print("Dataset is initialized correctly!")
                    
     
-    def Process_Data(x , y ,dataset_multiplier, DataProcessed_directory, val_split = 0.2, test_split = 0, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):        
+    def Process_Data(x , y , val_split = 0.2, test_split = 0, DataType = np.float32, normalization = None, **kwargs):        
+        print("\n")
         if val_split+test_split>1:
             raise ValueError("Val_split and test_split cannot sum above 1, lower your values so they do not exceed 1")
         elif val_split+test_split>0.5:
@@ -1885,86 +1855,249 @@ class Utils:
         
         if test_split == 0:
             Create_test_set = False
+            print("Splitting Dataset into train / validation sets...")
         else:
             Create_test_set = True
+            print("Splitting Dataset into train / validation / test sets...")
             
-        #Folder creation if not existing
-        if not os.path.isdir(DataProcessed_directory):
-            os.makedirs(DataProcessed_directory)
-            print("Creating processed data storage directory...\n") 
-        #If folder exists trying to load data from it
-        else:  
-            print("Found processed Dataset,loading...")
-            if Create_test_set:
-                try:
-                    x_train = np.load(os.path.join(DataProcessed_directory ,"x_train.npy"))
-                    y_train = np.load(os.path.join(DataProcessed_directory ,"y_train.npy"))
-                    
-                    x_val = np.load(os.path.join(DataProcessed_directory ,"x_val.npy"))
-                    y_val = np.load(os.path.join(DataProcessed_directory ,"y_val.npy"))
-                    
-                    x_test = np.load(os.path.join(DataProcessed_directory ,"x_test.npy"))
-                    y_test = np.load(os.path.join(DataProcessed_directory ,"y_test.npy"))
-                    return x_train , y_train , x_val , y_val , x_test , y_test
-                    
-                except:
-                    print("Could not load processed files, probably not present in the folder, creating...")
-                
-            else:
-                try:
-                    x_train = np.load(os.path.join(DataProcessed_directory ,"x_train.npy"))
-                    y_train = np.load(os.path.join(DataProcessed_directory ,"y_train.npy"))
-                    
-                    x_val = np.load(os.path.join(DataProcessed_directory ,"x_val.npy"))
-                    y_val = np.load(os.path.join(DataProcessed_directory ,"y_val.npy"))
-                    return x_train , y_train , x_val , y_val
-        
-                       
-                except:
-                    print("Could not load processed files, probably not present in the folder, creating...")
-               
-    
-        print("There is no Dataset processed, processing Dataset...")
-
         f1_factor = val_split+test_split
         f2_factor = test_split/f1_factor
 
         if not Create_test_set:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = f1_factor ,stratify = y, shuffle = True)
+            del x,y
         else:
             x_train , x_val , y_train , y_val = train_test_split(x,y,test_size = f1_factor ,stratify = y, shuffle = True)
+            del x,y
             x_val , x_test , y_val , y_test = train_test_split(x_val,y_val,test_size = f2_factor ,stratify = y_val, shuffle = True)
-        
-        print("Augmentation of images...")
-        if (not (flipRotate or randBright or gaussian or denoise or contour)) and dataset_multiplier >1:
-            print("\nNo augmentation specified, dataset will be just multiplied",dataset_multiplier, "times")
-            
-        if (not (flipRotate or randBright or gaussian or denoise or contour)) and dataset_multiplier <=1:
-            print("\nNo augmentation, skipping...")
-        x_train,y_train = ml.DataSets.Augment_classification_dataset(x_train, y_train, dataset_multiplier, flipRotate, randBright, gaussian, denoise, contour )            
+
+
             
         
+        print("Dataset Normalization...")
+        # Store functions and their required parameters
+
+
         
+        if normalization is None:
+            print("No normalization function specified - returning splitted data as it was loaded only with specified DataType:   ",str(DataType))
+
+        else:
+            #Start normalization process
+            print("Performing: '", str(normalization), "' normalization function...")
+            #1 Define available functions and their parameters (They should be named exactly like in the function)
+            #Paramters are also uniformed as they are used acrossed different functions: Mean, Std etc.
+            #So while adding new function its necessary to stick to previous names (or add new parameter)
+            normalization_dict = {
+                                    'Min_max': {
+                                                'func': ml.DataSets.Min_max_scaling,
+                                                'calculation_params': ['Data_minimum', "Data_maximum" ]
+                                                },
+                                    'Min_max_channel': {
+                                                'func': ml.DataSets.Min_max_scaling_channel_wise,
+                                                'calculation_params': ['Channel_data_minimum' , 'Channel_data_maximum']
+                                                },
+                                    'Z_score': {
+                                                'func': ml.DataSets.Z_score_norm,
+                                                'calculation_params': ['Mean', 'Std']
+                                                },
+                                    'Z_score_channel': {
+                                                'func': ml.DataSets.Z_score_norm_channel_wise,
+                                                'calculation_params': ['Channel_mean', 'Channel_std']
+                                                },
+                                    'Max_absolute': {
+                                                'func': ml.DataSets.Max_absolute_scaling,
+                                                'calculation_params': ['Data_maximum']
+                                                },
+                                    'Max_absolute_channel': {
+                                                'func': ml.DataSets.Max_absolute_scaling_channel_wise,
+                                                'calculation_params': ['Channel_data_maximum']
+                                                },
+                                    'Robust': {
+                                                'func': ml.DataSets.Robust_scaling,
+                                                'calculation_params': ['Median', 'IQR']
+                                                },
+                                    'Robust_channel': {
+                                                'func': ml.DataSets.Robust_scaling_channel_wise,
+                                                'calculation_params': ['Channel_median', 'Channel_IQR']
+                                                },
+                                 }
+            
+            """   
+            
+            current_list of params, while adding new function to library with parameter
+            not on this list, it should be added to work properly
+            
+            "Mean"                      : mean of train dataset
+            "Std"                       : standard deviation of train dataset
+            "Channel_mean"              : mean of each channel in train dataset
+            "Channel_std"               : std of each channel in train dataset
+            "Data_minimum"              : Minimum value in train dataset in numpy array
+            "Data_maximum"              : Maximum value in train dataset in numpy array       
+            "Channel_data_minimum"      : Minimum value for each channel (RGB),  in train dataset in numpy array
+            "Channel_data_maximum"      : Maximum value for each channel (RGB),  in train dataset in numpy array
+            "Median"                    : Median of train dataset
+            "IQR"                       : InterQuartile Range --> Difference between 3rd Q3 and 1st Q1 quartile of train data
+            "Channel_median"            : Median of train dataset for each channel in numpy array
+            "Channel_IQR"               : InterQuartile Range --> Difference between 3rd Q3 and 1st Q1 quartile of train data for each channel in numpy array
+            """
+            
+            #2 #Get normalization function and check if its present in the library
+            normalization_info = normalization_dict.get(normalization)
+            if normalization_info is None:
+                available_normalizations = ", ".join(normalization_dict.keys())
+                raise ValueError(f"Normalization '{normalization}' is not supported. Available options: {available_normalizations}")
+            
+            #3 Extract function and get its necessary parameters defined in step 1
+            normalization_func = normalization_info['func']
+            calculation_params = normalization_info['calculation_params']
+            
+            #3.1 Check if user passed parameters are valid according to chosen function
+
+            # Validation function to check if the parameters provided are valid and compare with required
+            def validate_parameters(func, required_params, **kwargs):
+                # Get the signature of the function (this gives us all parameter names)
+                sig = inspect.signature(func)
+                valid_params = list(sig.parameters.keys())
+            
+                # Find the parameters the user can modify (not in required_params)
+                modifiable_params = [param for param in valid_params if param not in required_params]
+            
+                # Check for invalid parameters provided by the user
+                for key in kwargs:
+                    if key not in valid_params:
+                        valid_params_str = " , ".join(modifiable_params)
+                        raise ValueError(f"'{key}' is not a valid parameter for '{func.__name__}'.\nYou can only modify the following parameters:\n{{ {valid_params_str} }}")
+            
+                # Return only the valid, modifiable parameters for the function
+                return kwargs
+            
+            try:
+                #If Validation of parameters passes, then function will perform
+                validate_parameters(normalization_func,calculation_params, **kwargs)
+                
+            except ValueError as e:
+                #If not error will occur with list of parameters
+                print(e)
+                
+                raise #Stopping script to update variables names by user (they are printedby now as this error is reached)
+            
+            
+            
+            #4.1
+            def determine_closest_float_type(DataType):
+                """
+                Determine the closest memory-efficient floating-point type based on the given dtype.
+                
+                Parameters:
+                DataType: The dtype to evaluate and convert.
+
+                Returns:
+                Numpy dtype: The converted dtype (either float32 or float64).
+                """
+                # Determine the closest floating point type based on input dtype
+                if np.issubdtype(DataType, np.floating):
+                    # If it is already a floating type
+                    if DataType == np.float64:
+                        return np.float64  # Keep float64
+                    else:
+                        return np.float32  # Convert any other float type to float32
+                elif np.issubdtype(DataType, np.integer):
+                    # If the input is an integer type
+                    return np.float32  # Convert integer to float32
+                elif DataType == np.bool_:
+                    # Convert boolean to float32
+                    return np.float32
+                else:
+                    # If the dtype is unsupported, raise an error
+                    raise ValueError(f"Dtype {DataType} is not supported for conversion.")
+            #Save chosen DataType for final conversion
+            Final_DataType = DataType
+            #Adjust datatype so it fits numba requirements
+            DataType = determine_closest_float_type(DataType)
+ 
+            # Example usage
+            def calculate_parameters(x_train, calculation_params, DataType):
+                for param in calculation_params:
+                    if param == 'Mean':
+                        kwargs['Mean'] = ml.Optimized.calc_mean(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Std':
+                        kwargs['Std'] = ml.Optimized.calc_std(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_mean':
+                        kwargs['Channel_mean'] = ml.Optimized.calc_channel_mean(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_std':
+                        kwargs['Channel_std'] = ml.Optimized.calc_channel_std(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Data_maximum':
+                        kwargs['Data_maximum'] = ml.Optimized.calc_data_maximum(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Data_minimum':
+                        kwargs['Data_minimum'] = ml.Optimized.calc_data_minimum(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_data_minimum':
+                        kwargs['Channel_data_minimum'] = ml.Optimized.calc_channel_data_minimum(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_data_maximum':
+                        kwargs['Channel_data_maximum'] = ml.Optimized.calc_channel_data_maximum(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Median':
+                        kwargs['Median'] = ml.Optimized.calc_median(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'IQR':
+                        kwargs['IQR'] = ml.Optimized.calc_iqr(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_median':
+                        kwargs['Channel_median'] = ml.Optimized.calc_channel_median(x_train, DataType)
+                        print("Calculated: ", param)
+                    
+                    elif param == 'Channel_IQR':
+                        kwargs['Channel_IQR'] = ml.Optimized.calc_channel_iqr(x_train, DataType)
+                        print("Calculated: ", param)
+                
+                return kwargs   
+                    
+
+                    
+                        
+                    
+
+            kwargs = calculate_parameters(x_train ,calculation_params, DataType)   
+            #Check if additional parameters matches into chosen function
+            
+
+            x_train = normalization_func(x_train, **kwargs)
+            x_val = normalization_func(x_val, **kwargs)
+            if Create_test_set:
+                x_test = normalization_func(x_test, **kwargs)
+
+  
+                    
+
+        #Final conversion if it has not been performed before by norm function (like custom one), or at all (no norm func)
+        x_train = x_train.astype(Final_DataType, copy=False)
+        y_train = y_train.astype(Final_DataType, copy=False)
         
+        x_val = x_val.astype(Final_DataType, copy=False)
+        y_val = y_val.astype(Final_DataType, copy=False)
         if Create_test_set:
-            np.save(os.path.join(DataProcessed_directory ,"x_train.npy") , x_train)
-            np.save(os.path.join(DataProcessed_directory ,"y_train.npy") , y_train)
-            
-            np.save(os.path.join(DataProcessed_directory ,"x_val.npy") , x_val)
-            np.save(os.path.join(DataProcessed_directory ,"y_val.npy") , y_val)
-            
-            np.save(os.path.join(DataProcessed_directory ,"x_test.npy") , x_test)
-            np.save(os.path.join(DataProcessed_directory ,"y_test.npy") , y_test)
-            
+            x_test = x_test.astype(Final_DataType, copy=False)
+            y_test = y_test.astype(Final_DataType, copy=False)
             return x_train , y_train , x_val , y_val , x_test , y_test
             
         else:
-            np.save(os.path.join(DataProcessed_directory ,"x_train.npy") , x_train)
-            np.save(os.path.join(DataProcessed_directory ,"y_train.npy") , y_train)
-            
-            np.save(os.path.join(DataProcessed_directory ,"x_val.npy") , x_val)
-            np.save(os.path.join(DataProcessed_directory ,"y_val.npy") , y_val)
-            
             return x_train , y_train , x_val , y_val
     
     
@@ -2055,7 +2188,12 @@ class Utils:
                 y_pred = self.model.predict(self.train[0])
                 y_pred = np.argmax(y_pred,axis = 1).astype(int).tolist()
                 
-                y_true = np.argmax(self.train[1],axis = 1).astype(int).tolist()
+                try:
+                    #Multiclass scenario, taking numerical value
+                    y_true = np.argmax(self.train[1],axis = 1).astype(int).tolist()
+                except:
+                    #Binary class scenario 0 and 1
+                    y_true = self.train[1].astype(int).tolist()
                 
                 train_metrics = [y_true,y_pred]
                 del y_pred
@@ -2067,8 +2205,12 @@ class Utils:
                 print("Calculating metrics for validation set...")
                 y_pred = self.model.predict(self.val[0])
                 y_pred = np.argmax(y_pred,axis = 1).astype(int).tolist()
-                
-                y_true = np.argmax(self.val[1],axis = 1).astype(int).tolist()
+                try:
+                    #Multiclass scenario, taking numerical value
+                    y_true = np.argmax(self.val[1],axis = 1).astype(int).tolist()
+                except:
+                    #Binary class scenario 0 and 1
+                    y_true = self.val[1].astype(int).tolist()
                 
                 val_metrics = [y_true,y_pred]
                 del y_pred
@@ -2091,7 +2233,7 @@ class Utils:
 
 
                 
-    def Initialize_weights_and_training(x_train, y_train, model, model_directory, train, epochs, patience, batch_size,min_delta, monitor, mode, x_val=None, y_val=None, device = "CPU:0"):    
+    def Initialize_weights_and_training(x_train, y_train, model, model_directory, train, epochs, patience, batch_size, min_delta, monitor, mode, learning_scheduler = None,augmentation_config = None, x_val=None, y_val=None, device = "CPU:0"):    
         #!!! Model training
         #########################################################################
         #########################################################################
@@ -2104,8 +2246,9 @@ class Utils:
         model_history_directory = os.path.join(model_directory , "Model_history.csv")
         model_metrics_directory = os.path.join(model_directory , "Model_metrics.csv")
         best_model_directory = os.path.join(model_directory , "Model_best.keras")
+        custom_obj_directory = os.path.join(model_directory , "Custom_objects.json")
         
-        model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, epochs, model_weights_directory, model_history_directory)
+        model , train , starting_epoch = ml.General.Load_model_check_training_progress(model, train, epochs, model_weights_directory, model_history_directory, custom_obj_directory)
         
              
         if train:
@@ -2129,16 +2272,29 @@ class Utils:
                         Utils.SilentProgbarLogger(count_mode = 'steps'),
                         Utils.MetricsCallback(file_path = model_metrics_directory,train_data = (x_train,y_train),validation_data = (x_val,y_val))
                         ]
+            
+            #Append learning_scheduler if its specified in function
+            if learning_scheduler is not None:
+                callbacks.append(tf.keras.callbacks.LearningRateScheduler(learning_scheduler))
 
+            #Prepare data and apply augmentation if specified:
+            aug_function = ml.DataSets.Augment_dataset
+            train_dataset = (
+                tf.data.Dataset.from_tensor_slices((x_train, y_train))
+                .shuffle(1000)
+                .map(lambda image, label: aug_function(image, label, augmentation_config), num_parallel_calls = tf.data.AUTOTUNE)  # Use AUTOTUNE for optimal parallelism
+                .batch(batch_size)
+                .prefetch(tf.data.AUTOTUNE)  # Prefetch to load data while training
+            )
+                
             with tf.device(device):
                 
                 #Start measuring time
                 timer_start = timer()
-                model.fit(x_train,y_train,
+                model.fit(train_dataset,
                           initial_epoch = starting_epoch,
                           validation_data = (x_val , y_val),
                           epochs=epochs,
-                          batch_size = batch_size,
                           callbacks = callbacks,
                           use_multiprocessing = True,
                           verbose = 1
@@ -2272,9 +2428,8 @@ class Utils:
 
 class Project:
     class Classification_Project:
-        def  __init__(self,Database_Directory):
+        def  __init__(self):
             self.PROJECT_DIRECTORY = os.path.dirname(os.path.abspath(sys.argv[0]))
-            self.DATABASE_DIRECTORY = Database_Directory
             
             """
 
@@ -2347,8 +2502,15 @@ class Project:
             #print(t.draw())
             return t.draw()
             
-    
-        def Initialize_data(self,Img_Height,Img_Width,Grayscale = False,CSV_Load = False): 
+        def check_attribute(self, attribute_name):
+            if not hasattr(self, attribute_name):
+                raise AttributeError(f"Warning: [ERROR] '{attribute_name}' is not initialized. \nPlease initialize '{attribute_name}' before proceeding. \nThis type of error is commonly caused if you skipped some part of pipeline. You need to add some variables on your own then")
+            else:
+                print(f"'{attribute_name}' is present and initialized.")
+                
+            
+        def Initialize_data(self, Database_Directory, Img_Height, Img_Width, Grayscale = False, CSV_Load = False): 
+            self.DATABASE_DIRECTORY = Database_Directory
             self.IMG_H = Img_Height
             self.IMG_W = Img_Width
             self.GRAYSCALE = Grayscale
@@ -2366,79 +2528,105 @@ class Project:
             
             Utils.Initialize_data(self.DATABASE_DIRECTORY, self.DATA_DIRECTORY, self.IMG_H, self.IMG_W, self.GRAYSCALE , self.CSV_LOAD)
             ########################################################
-        def Load_and_merge_data(self,Reduced_class_size = None):
+        def Load_and_merge_data(self, Reduced_class_size = None, reduced_class_shuffle = False):
+              
+            self.check_attribute("DATA_DIRECTORY")
+            self.check_attribute("IMG_H")
+            self.check_attribute("IMG_W")
+            
             """Loading dataset to memory from data directory in project folder, sets can be reduced to equal size
             to eliminate disproportions if they are not same size at the main database
             In this module dictionary with names of classes is created as well, names are based on names of datsets
             Datasets names are based on the folder names in main database folder"""
             
             self.REDUCED_SET_SIZE = Reduced_class_size
+            self.REDUCED_CLASS_SHUFFLE = reduced_class_shuffle
             
-            X, Y, DICTIONARY = ml.DataSets.Load_And_Merge_DataSet(self.DATA_DIRECTORY , self.REDUCED_SET_SIZE )
+            X, Y, DICTIONARY = ml.DataSets.Load_And_Merge_DataSet(self.DATA_DIRECTORY , self.REDUCED_SET_SIZE, self.REDUCED_CLASS_SHUFFLE)
             
             return X, Y, DICTIONARY
             ########################################################
             
-        def Process_data(self,X,Y,Val_split,Test_split,DataSet_multiplier = 1,DataType = "float32",FlipRotate = False,
-                                                                                                      RandBright = False,
-                                                                                                      Gaussian_noise = False,
-                                                                                                      Denoise = False,
-                                                                                                      Contour = False):
-            
+        def Process_data(self, X, Y, Val_split, Test_split, Normalization = None, DataType = np.float32,**kwargs):
+            if not os.path.exists("DataSet_Processed"):
+                os.mkdir("DataSet_Processed")
+                
             self.VAL_SPLIT = Val_split
             self.TEST_SPLIT = Test_split
-            self.DATASET_MULTIPLIER = DataSet_multiplier
+            self.NORMALIZATION = Normalization
             self.DATA_TYPE = DataType
+            if len(kwargs)>0:
+                kwarg_sep = "_"
+                valid_kwargs_str = "_".join([f"{k}={v}" for k, v in kwargs.items()])
+            else:
+                kwarg_sep = ""
+                valid_kwargs_str = ""
+                
+            self.PROCESS_MARK = str(" [ Val_"+ str(self.VAL_SPLIT) + "_Test_"+ str(self.TEST_SPLIT) + "_"+ml.General.extract_type(DataType) + kwarg_sep + valid_kwargs_str+" ]") 
+            self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM), str(self.NORMALIZATION + self.PROCESS_MARK))
             
-            self.FLIPROTATE = FlipRotate
-            self.RANDBRIGHT = RandBright
-            self.GAUSSIAN = Gaussian_noise
-            self.DENOISE = Denoise
-            self.CONTOUR = Contour
-            
-            self.CHANNELS = self.CHANNELS+1 if self.CONTOUR else self.CHANNELS
-            
-            cr = 0 if self.REDUCED_SET_SIZE is None else self.REDUCED_SET_SIZE
-            self.PARAM_MARK = "_m"+str(self.DATASET_MULTIPLIER)+"_cr"+str(cr)+"_"+ "_".join(["1" if x else "0" for x in [self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR]])
-            self.DATAPROCESSED_DIRECTORY = os.path.join(self.PROJECT_DIRECTORY , "DataSet_Processed" , str(str(self.IMG_H)+"x"+str(self.IMG_W)+"_"+self.FORM),self.PARAM_MARK)
             if self.TEST_SPLIT == 0:
                 create_test_set = False
             else:
                 create_test_set = True
-            #3
-            ########################################################
-            self.SPLIT_MARK = "Val_"+str(round(Val_split,3))+"  Test_"+str(round(Test_split,3))
-            self.DATAPROCESSED_DIRECTORY = os.path.join(self.DATAPROCESSED_DIRECTORY,self.SPLIT_MARK)
+                
+            try:
+                X_TRAIN = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "x_train.npy"))
+                Y_TRAIN = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "y_train.npy"))
+                
+                X_VAL = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "x_val.npy"))
+                Y_VAL = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "y_val.npy"))
+                if create_test_set:
+                    X_TEST = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "x_test.npy"))
+                    Y_TEST = np.load(os.path.join(self.DATAPROCESSED_DIRECTORY, "y_test.npy"))
+                print("Found and loaded processed data with given parameters!")
+            except:
+                
+                #3
+                ########################################################
+                if not create_test_set:
+                    X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.VAL_SPLIT, self.TEST_SPLIT, self.DATA_TYPE, Normalization, **kwargs)
+                    
+                    #Make specific processed combination folder
+                    if not os.path.exists(self.DATAPROCESSED_DIRECTORY):
+                        if not os.path.exists(os.path.dirname(self.DATAPROCESSED_DIRECTORY)):
+                            os.mkdir(os.path.dirname(self.DATAPROCESSED_DIRECTORY))
+                            
+                        os.mkdir(self.DATAPROCESSED_DIRECTORY)
+                        
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'x_train.npy'), X_TRAIN)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'y_train.npy'), Y_TRAIN)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'x_val.npy'), X_VAL)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'y_val.npy'), Y_VAL)
+                    
+                    
+                else:
+                    X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.VAL_SPLIT, self.TEST_SPLIT, self.DATA_TYPE, Normalization, **kwargs)
+                    
+                    #Make specific processed combination folder
+                    if not os.path.exists(self.DATAPROCESSED_DIRECTORY):
+                        if not os.path.exists(os.path.dirname(self.DATAPROCESSED_DIRECTORY)):
+                            os.mkdir(os.path.dirname(self.DATAPROCESSED_DIRECTORY))
+                            
+                        os.mkdir(self.DATAPROCESSED_DIRECTORY)
+                    
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'x_train.npy'), X_TRAIN)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'y_train.npy'), Y_TRAIN)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'x_val.npy'), X_VAL)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'y_val.npy'), Y_VAL)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'x_test.npy'), X_TEST)
+                    np.save(os.path.join(self.DATAPROCESSED_DIRECTORY, 'y_test.npy'), Y_TEST)
+                    
             if not create_test_set:
-                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.VAL_SPLIT, self.TEST_SPLIT, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
-            
-            else:
-                X_TRAIN , Y_TRAIN, X_VAL , Y_VAL , X_TEST , Y_TEST = Utils.Process_Data(X, Y, self.DATASET_MULTIPLIER, self.DATAPROCESSED_DIRECTORY, self.VAL_SPLIT, self.TEST_SPLIT, self.FLIPROTATE, self.RANDBRIGHT, self.GAUSSIAN, self.DENOISE, self.CONTOUR)
-            
-            if create_test_set:
-                X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)
-                Y_TRAIN = np.array(Y_TRAIN , dtype = self.DATA_TYPE)
-                
-                X_VAL = np.array(X_VAL/255 , dtype = self.DATA_TYPE)
-                Y_VAL = np.array(Y_VAL , dtype = self.DATA_TYPE)
-                
-                X_TEST = np.array(X_TEST/255 , dtype = self.DATA_TYPE)
-                Y_TEST = np.array(Y_TEST , dtype = self.DATA_TYPE)
-                
-                return X_TRAIN, Y_TRAIN, X_VAL, Y_VAL, X_TEST, Y_TEST 
-            
-            else:
-                X_TRAIN = np.array(X_TRAIN/255 , dtype = self.DATA_TYPE)
-                Y_TRAIN = np.array(Y_TRAIN , dtype = self.DATA_TYPE)
-                
-                X_VAL = np.array(X_VAL/255 , dtype = self.DATA_TYPE)
-                Y_VAL = np.array(Y_VAL , dtype = self.DATA_TYPE)
-            
                 return X_TRAIN, Y_TRAIN, X_VAL, Y_VAL
+            else:
+                return X_TRAIN, Y_TRAIN, X_VAL, Y_VAL, X_TEST, Y_TEST
+                
+
                 
             ########################################################
             
-        def Save_Data(self,x_train,y_train,x_val,y_val,dictionary = None,x_test = None,y_test = None, new_param_mark = None):
+        def Save_Data(self,x_train,y_train,x_val,y_val,dictionary = None,x_test = None,y_test = None, new_normalization_mark = None ,new_process_mark = None):
             self.X_TRAIN = x_train
             self.Y_TRAIN = y_train
             
@@ -2450,8 +2638,11 @@ class Project:
             self.Y_TEST = y_test
             
             
-            #Redefining some self variables if there is change 
-            self.N_CLASSES = y_train.shape[1]
+            #Redefining some self variables if there is change
+            try:
+                self.N_CLASSES = y_train.shape[1]
+            except:
+                self.N_CLASSES = len(np.unique(y_train))
             
             if dictionary is None:
                 self.DICTIONARY = [(i,"Class: "+str(i)) for i in range(self.N_CLASSES)]
@@ -2467,9 +2658,18 @@ class Project:
             except:
                 pass
             
-            for i in range(self.N_CLASSES):
-                _, class_size = np.unique(labels[:,i],return_counts = True)
-                self.CLASS_OCCURENCE.append((str(self.DICTIONARY[i][1]),int(class_size[1])))
+            try:
+                #Scenario for multiclass
+                for i in range(self.N_CLASSES):
+                    _, class_size = np.unique(labels[:,i],return_counts = True)
+                    self.CLASS_OCCURENCE.append((str(self.DICTIONARY[i][1]),int(class_size[1])))
+            except:
+                #Scenario for binary class (Not one hot encoded)
+                _,class_size =  np.unique(labels, return_counts=True)
+                for i in range(self.N_CLASSES):
+                    self.CLASS_OCCURENCE.append((str(self.DICTIONARY[i][1]),int(class_size[i])))
+                    
+
             
             
             self.IMG_H = x_train.shape[1]
@@ -2483,33 +2683,50 @@ class Project:
             self.GRAYSCALE = True if channels == 1 else False
             self.FORM = "Grayscale" if self.GRAYSCALE else "RGB"
             self.DATA_TYPE = x_train.dtype
-            if new_param_mark is not None:
-                self.PARAM_MARK = new_param_mark
             
+            if new_normalization_mark is not None:
+                self.NORMALIZATION = new_normalization_mark
+            if new_process_mark is not None:
+                self.PROCESS_MARK = new_process_mark
             
             
     
-    
-        def Initialize_weights_and_training(self, Model, Architecture_name, Epochs, Batch_size, Train = True, Patience = 10, Min_delta_to_save = 0.1, Checkpoint_monitor = "val_loss", Checkpoint_mode = "min", Device = "CPU", add_config_info = None):
+        def Initialize_weights_and_training(self, Model, Architecture_name, Epochs, Batch_size, Train = True, Learning_rate_scheduler = None, Augmentation_config = None, Patience = 10, Min_delta_to_save = 0.1, Checkpoint_monitor = "val_loss", Checkpoint_mode = "min", Device = "CPU", add_config_info = None):
             self.ARCHITECTURE_NAME = Architecture_name
             self.EPOCHS = Epochs
             self.BATCH_SIZE = Batch_size
             self.CHECKPOINT_MONITOR = Checkpoint_monitor
             self.CHECKPOINT_MODE = Checkpoint_mode
+            self.CUSTOM_OBJECTS = ml.General.save_custom_objects(Model, custom_objects_path = None)
+            self.AUGMENTATION_CONFIG = Augmentation_config
+
             
             #5
             ########################################################
             #Create data for parameters file
             n_classes = self.N_CLASSES
             class_size = self.CLASS_OCCURENCE
-            val_split = self.VAL_SPLIT
-            test_split = self.TEST_SPLIT
+            try:
+                val_split = self.VAL_SPLIT
+            except:
+                val_split = "Unspecified"
+                self.VAL_SPLIT = "Unspecified"
+            try:
+                test_split = self.TEST_SPLIT
+            except:
+                test_split = "Unspecified"
+                self.TEST_SPLIT = "Unspecified"
             
             img_H = self.IMG_H
             img_W = self.IMG_W
             grayscale = self.GRAYSCALE
             Image_datatype = str(self.DATA_TYPE)
-            Augmentation_mark = self.PARAM_MARK
+            Normalization = self.NORMALIZATION
+            try:
+                Processing_mark = self.PROCESS_MARK
+            except:
+                Processing_mark = "Unspecified"
+                self.PROCESS_MARK = "Unspecified"
             
             user_architecture_name = self.ARCHITECTURE_NAME
             Model_datatype = str("float32")
@@ -2519,7 +2736,15 @@ class Project:
             
             batch_size = self.BATCH_SIZE
             optimizer_params = str(Model.optimizer.get_config())
+            if self.AUGMENTATION_CONFIG is not None:
+                augmentation_params = str(self.AUGMENTATION_CONFIG.get_dict())
+            else:
+                augmentation_params = "None"
             
+            if Learning_rate_scheduler is None:
+                learning_rate_scheduler_str = "None"
+            else:
+                learning_rate_scheduler_str = ml.General.save_function_as_string(Learning_rate_scheduler, save_path = None)
             try:
                 #Scenario where loss function is custom function written by user
                 loss = str(Model.loss.__name__)
@@ -2540,8 +2765,11 @@ class Project:
                 "Image Width": img_W,
                 "Grayscale": grayscale,
                 "Image Datatype": Image_datatype,
-                "Augmentation Mark": Augmentation_mark,
+                "Normalization": Normalization,
+                "Processing Mark": Processing_mark,
+                "Augmentation params": augmentation_params, 
                 "User Architecture Name": user_architecture_name,
+                "Custom Objects hash": ml.General.hash_string(str(self.CUSTOM_OBJECTS)),
                 "Model Datatype": Model_datatype,
                 "Total Parameters": total_params,
                 "Trainable Parameters": trainable_params,
@@ -2549,6 +2777,7 @@ class Project:
                 "Number of Layers": num_layers,
                 "Batch Size": batch_size,
                 "Optimizer Parameters": optimizer_params,
+                "Learning Rate scheduler hash": ml.General.hash_string(learning_rate_scheduler_str),
                 "Loss function": loss,
                 "Checkpoint monitor": self.CHECKPOINT_MONITOR,
                 "Checkpoint mode": self.CHECKPOINT_MODE,
@@ -2572,40 +2801,10 @@ class Project:
             model_json_directory = os.path.join(model_directory,"Model_architecture_json.json")
             #######################################################
             custom_obj_path = os.path.join(model_directory,"Custom_objects.json")
-
-            def save_custom_objects(model, custom_objects_path):
-                custom_objects = {}
+            ml.General.save_custom_objects(Model, custom_obj_path)
             
-                # Detect custom layers
-                for layer in model.layers:
-                    if not hasattr(tf.keras.layers, layer.__class__.__name__):
-                        custom_objects[layer.__class__.__name__] = inspect.getsource(layer.__class__)
-            
-                # Detect custom loss, metrics, and optimizer
-                def is_custom(obj):
-                    # If obj is a string, it is a standard Keras loss/metric/optimizer name
-                    if isinstance(obj, str):
-                        return False
-                    
-                    # If obj is callable, check if it belongs to a TensorFlow/Keras module
-                    if callable(obj):
-                        return not (obj.__module__.startswith('tensorflow.keras') or obj.__module__.startswith('keras'))
-                    
-                    return False     
-                
-                if is_custom(model.loss):
-                    custom_objects[model.loss.__name__] = inspect.getsource(model.loss)
-                if is_custom(model.optimizer):
-                    custom_objects[model.optimizer.__class__.__name__] = inspect.getsource(model.optimizer)
-                for metric in model.metrics:
-                    if is_custom(metric):
-                        custom_objects[metric.__class__.__name__] = inspect.getsource(metric)
-            
-                # Serialize and save custom objects
-                with open(custom_objects_path, "w") as f:
-                    json.dump(custom_objects, f)
-                    
-            save_custom_objects(Model, custom_obj_path)
+            lr_scheduler_path = os.path.join(model_directory,"Lr_scheduler.json")
+            ml.General.save_function_as_string(Learning_rate_scheduler, save_path = lr_scheduler_path)
             
             ######################################################
             
@@ -2627,6 +2826,7 @@ class Project:
                 #Save model architecture only so it can be retrieved in future
                 ml.General.save_model_as_json(model = Model, filename = model_json_directory)
                 print("Model architecture JSON template saved")
+                
             bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"Assets","Background.png" )
             #Create and save pdf of model
             Utils.Generate_model_pdf(model_hash = f_name,
@@ -2649,15 +2849,15 @@ class Project:
                                                        min_delta= Min_delta_to_save,
                                                        monitor = self.CHECKPOINT_MONITOR,
                                                        mode = Checkpoint_mode,
+                                                       learning_scheduler = Learning_rate_scheduler,
+                                                       augmentation_config = self.AUGMENTATION_CONFIG,
                                                        device = Device
                                                        )
             
-            return self.MODEL
-            ########################################################
-    
-        def Initialize_results(self,show_plots = False,save_plots = True,Evaluate = False):
-            #6
-            ########################################################
+            #Initialize results of current model session
+            Evaluate = True
+            show_plots = False
+            save_plots = True
             Utils.Initialize_Results(self.MODEL,
                                   self.MODEL_DIRECTORY,
                                   self.DICTIONARY,
@@ -2671,9 +2871,10 @@ class Project:
                                   show_plots,
                                   save_plots
                                   )
-            ######################################################## 
             
-
+            return self.MODEL
+            ########################################################
+    
        
         def Generate_sample_submission(self, filepath = None):
             if filepath is None:

@@ -1,3 +1,8 @@
+Version 0.2.3
+Update introducing real time augmentation and abandoning the idea of storing pre-augmented data on drive. 
+Augmentation is optimized so if your training process in on GPU, there will be no significant slowdown as data
+ will be augmented similtanously on the CPU while training the network
+=====================================================================================
 Version 0.2.2
 Fixed bug, which caused model_parameters.json file not be possible to create, while using custom loss function
 =====================================================================================

@@ -24,12 +24,224 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     confusion_matrix
 )
-
+import json
+import inspect
+import numba as nb
+from texttable import Texttable
 
 class DataSets:
     #Scenario 1
     #If it is classification data
     ################################################
+    @nb.njit(parallel=True)
+    def Min_max_scaling(Data, Data_minimum = None, Data_maximum = None, New_min = 0, New_max = 1, DataType = np.float32):
+        #For training data where its not necessary to specify it
+        # For training data where it's not necessary to specify the min/max
+        if Data_minimum is None:
+            print("Didnt provided data minimum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Data_minimum = np.empty(1, dtype=DataType)
+            for c in range(1):
+                Data_minimum[c] = DataType(Data.min())
+               
+        if Data_maximum is None:
+            print("Didnt provided data maximum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Data_maximum = np.empty(1, dtype=DataType)
+            for c in range(1):
+                Data_maximum[c] = DataType(Data.max())  
+            
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype = DataType)
+        
+        # Process the array in chunks to save memory
+        for i in nb.prange(Data.shape[0]):
+            Normalized_data[i] = ((Data[i] - Data_minimum[0]) / (Data_maximum[0] - Data_minimum[0])) * (New_max - New_min) + New_min  
+        
+        return Normalized_data
+    
+    
+    
+    @nb.njit(parallel=True)
+    def Min_max_scaling_channel_wise(Data, Channel_data_minimum=None, Channel_data_maximum=None, New_min=0, New_max=1, DataType=np.float32):
+        # Data shape is assumed to be (n, img_h, img_w, channels)
+        n, img_h, img_w, channels = Data.shape
+        
+        # For training data where it's not necessary to specify the min/max
+        if Channel_data_minimum is None:
+            print("Didnt provided Channel data minimum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_data_minimum = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_data_minimum[c] = DataType(Data[:, :, :, c].min())
+        
+        if Channel_data_maximum is None:
+            print("Didnt provided Channel data maximum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_data_maximum = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_data_maximum[c] = DataType(Data[:, :, :, c].max())
+                
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype=DataType)
+        
+        # Process the array in chunks to save memory, applying scaling channel-wise
+        for i in nb.prange(n):
+            for c in range(channels):
+                Normalized_data[i, :, :, c] = ((Data[i, :, :, c] - Channel_data_minimum[c]) / 
+                                               (Channel_data_maximum[c] - Channel_data_minimum[c])) * (New_max - New_min) + New_min
+        
+        return Normalized_data
+    
+    ###################################################################
+    @nb.njit(parallel=True)
+    def Z_score_norm(Data, Mean = None, Std = None, DataType = np.float32):
+        #For training data where its not necessary to specify it
+        if Mean is None:
+            print("Didnt provided mean --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Mean = Data.mean()
+        if Std is None:
+            print("Didnt provided std --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Std = Data.std()
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype = DataType)
+        
+        # Process the array in chunks to save memory
+        for i in nb.prange(Data.shape[0]):
+            Normalized_data[i] = (Data[i] - Mean) / Std
+        
+        return Normalized_data
+        
+    
+    @nb.njit(parallel=True)
+    def Z_score_norm_channel_wise(Data, Channel_mean=None, Channel_std=None, DataType=np.float32):
+        # Data shape is assumed to be (n, img_h, img_w, channels)
+        n, img_h, img_w, channels = Data.shape
+        
+        # For training data where it's not necessary to specify the mean/std
+        if Channel_mean is None:
+            print("Didnt provided Channel mean --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_mean = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_mean[c] = Data[:, :, :, c].mean()
+    
+        if Channel_std is None:
+            print("Didnt provided Channel std --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_std = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_std[c] = Data[:, :, :, c].std()
+                
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype=DataType)
+        
+        # Process the array in chunks to save memory, applying normalization channel-wise
+        for i in nb.prange(n):
+            for c in range(channels):
+                Normalized_data[i, :, :, c] = (Data[i, :, :, c] - Channel_mean[c]) / Channel_std[c]
+        
+        return Normalized_data
+    
+    
+    ##########################################################################
+    @nb.njit(parallel=True)
+    def Max_absolute_scaling(Data, Data_maximum = None, DataType = np.float32):
+        #For training data where its not necessary to specify it
+        if Data_maximum is None:
+            print("Didnt provided Data maximum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Data_maximum = np.empty(1, dtype=DataType)
+            for c in range(1):
+                Data_maximum[c] = DataType(Data.max())  
+                
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype = DataType)
+        # Process the array in chunks to save memory
+        for i in nb.prange(Data.shape[0]):
+            Normalized_data[i] = Data[i] / Data_maximum[0]
+        
+        return Normalized_data
+    
+    
+    @nb.njit(parallel=True)
+    def Max_absolute_scaling_channel_wise(Data, Channel_data_maximum = None, DataType=np.float32):
+        # Data shape is assumed to be (n, img_h, img_w, channels)
+        n, img_h, img_w, channels = Data.shape
+        
+        # For training data where it's not necessary to specify the maximum value
+        if Channel_data_maximum is None:
+            print("Didnt provided Channel data maximum --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_data_maximum = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_data_maximum[c] = np.max(np.abs(Data[:,:,:,c]))
+        
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty_like(Data, dtype=DataType)
+        
+        # Process the array in chunks to save memory, applying scaling channel-wise
+        for i in nb.prange(n):
+            for c in range(channels):
+                Normalized_data[i, :, :, c] = Data[i, :, :, c] / Channel_data_maximum[c]
+        
+        return Normalized_data
+
+    
+    def Robust_scaling(Data, Median=None, IQR=None, DataType=np.float32):
+        # Calculate Median and IQR if not provided (done outside numba)
+        if Median is None:
+            print("Didnt provided median --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Median = np.median(Data)
+        if IQR is None:
+            print("Didnt provided IQR --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            q1 = np.percentile(Data, 25)
+            q3 = np.percentile(Data, 75)
+            IQR = q3 - q1
+    
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty(Data.shape, dtype=DataType)
+    
+        # Define the numba function for the scaling process
+        @nb.njit(parallel=True)
+        def _robust_scaling_numba(Data, Median, IQR, Normalized_data):
+            for i in nb.prange(Data.shape[0]):
+                Normalized_data[i] = (Data[i] - Median) / IQR
+    
+        # Apply the numba-optimized scaling
+        _robust_scaling_numba(Data, Median, IQR, Normalized_data)
+    
+        return Normalized_data
+
+    
+    def Robust_scaling_channel_wise(Data, Channel_median=None, Channel_IQR=None, DataType=np.float32):
+        # Data shape is assumed to be (n, img_h, img_w, channels)
+        _, _, _, channels = Data.shape
+    
+        # Calculate Median and IQR for each channel if not provided (done outside numba)
+        if Channel_median is None:
+            print("Didnt provided Channel median --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_median = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                Channel_median[c] = np.median(Data[:, :, :, c])
+    
+        if Channel_IQR is None:
+            print("Didnt provided Channel IQR --> It will be calculated from provided Data\n !!This may lead to DATA LEAKAGE if not carefully watched!!")
+            Channel_IQR = np.empty(channels, dtype=DataType)
+            for c in range(channels):
+                q1 = np.percentile(Data[:, :, :, c], 25)
+                q3 = np.percentile(Data[:, :, :, c], 75)
+                Channel_IQR[c] = q3 - q1
+    
+        # Create an empty array for the transformed data
+        Normalized_data = np.empty(Data.shape, dtype=DataType)
+    
+        # Define the numba function for the scaling process
+        @nb.njit(parallel=True)
+        def _robust_scaling_channel_wise_numba(Data, Channel_median, Channel_IQR, Normalized_data):
+            n, _, _, channels = Data.shape
+            for i in nb.prange(n):
+                for c in range(channels):
+                    Normalized_data[i, :, :, c] = (Data[i, :, :, c] - Channel_median[c]) / Channel_IQR[c]
+    
+        # Apply the numba-optimized scaling
+        _robust_scaling_channel_wise_numba(Data, Channel_median, Channel_IQR, Normalized_data)
+    
+        return Normalized_data
+
+    
     
     def Reduce_Img_Classification_Class_Size(X,samples_per_class,shuffle_img = False):
         if shuffle_img:
@@ -225,7 +437,7 @@ class DataSets:
        
         
             
-    def Load_And_Merge_DataSet(Data_directory , samples_per_class = None):
+    def Load_And_Merge_DataSet(Data_directory, samples_per_class = None, reduced_class_shuffle = False ):
 
         Classes_list  = os.listdir(Data_directory)
         n_classes = len(Classes_list)
@@ -241,13 +453,20 @@ class DataSets:
                 return
         h = temporary_sheet.shape[1]
         w = temporary_sheet.shape[2]
-        channels = temporary_sheet.shape[3]
+        
+        try:
+            #Try to check channels
+            channels = temporary_sheet.shape[3]
+        except:
+            #If fails its grayscale or single channel array
+            channels = 1
+            
         del temporary_sheet
 
-        if channels == 3 :
-            x = np.zeros((0,h,w,3) , dtype = np.uint8)
+        if channels > 1 :
+            x = np.zeros((0,h,w,channels) , dtype = np.uint8)
         elif channels == 1:
-            x = np.zeros((0,h,w,1) , dtype = np.uint8)
+            x = np.zeros((0,h,w) , dtype = np.uint8)
         else:
             print("ERROR:   Channel number is incorrect, check file format (RGB/Grayscale)")
         
@@ -256,10 +475,15 @@ class DataSets:
             print('Preparing '+str(class_name) + " class")
             Dictionary.append((Classes_list.index(class_name),class_name))
             directory = os.path.join(Data_directory , class_name)
-            X_temp = np.load(directory , mmap_mode='r')
-
+            if reduced_class_shuffle:
+                #Copy on write, file will be modified only if file needs to be modified without affecting original data. Memory efficient, but not as much as 'r'
+                X_temp = np.load(directory , mmap_mode='c')
+            else:
+                #Read mode only, reduceds memory needed for operations
+                X_temp = np.load(directory , mmap_mode='r')
+            
             if samples_per_class is not None:
-                X_temp = DataSets.Reduce_Img_Classification_Class_Size(X_temp , samples_per_class)
+                X_temp = DataSets.Reduce_Img_Classification_Class_Size(X_temp , samples_per_class, reduced_class_shuffle)
             
             blank_class=np.zeros((len(X_temp),n_classes) , dtype = np.uint8)
             blank_class[:,Classes_list.index(class_name)] = 1
@@ -270,70 +494,301 @@ class DataSets:
  
         return x , ClassSet , Dictionary
             
-            
-              
-
-    def Augment_classification_dataset(x, y, dataset_multiplier, flipRotate = False , randBright = False , gaussian = False , denoise = False , contour = False ):
-        try:
-            n_classes = y.shape[1]
-        except:
-            n_classes = len(y)
-            
-        lenght = x.shape[0]
-        img_H = x.shape[1]
-        img_W = x.shape[2]
-        try:
-            channels = x.shape[3]
-        except:
-            channels = 1
-        
-        blank_class_y = np.zeros((0,n_classes) , dtype = np.uint8)
-        blank_class_x = np.zeros((0,img_H,img_W,channels) , dtype = np.uint8)
-
-
-            
-        if dataset_multiplier == 1 :
-            pass
-            print("No augmentation specified, loading only original images")
-        else:
-            print("Augmenting dataset:")
-            for p in range(dataset_multiplier - 1):
-            
-                x_aug = []
-                for i in tqdm(range(lenght)):
-                    if np.mean(x[i]) == 0:
-                        x[i,0,0,0] = 1
-                    aug_img = ImageProcessing.augment_image(image = x[i],
-                                                            rand_bright = randBright,
-                                                            gaussian = gaussian,
-                                                            denoise = denoise,
-                                                            flip_rotate = flipRotate,
-                                                            contour = contour  
-                                                            )
-                    x_aug.append(aug_img)
-                    
-                x_aug = np.asarray(x_aug)
                 
-                blank_class_x = np.concatenate( (blank_class_x , x_aug) )
-                
-                blank_class_y = np.concatenate( (blank_class_y , y) )
+    class Augmentation_Config:
+        """
+        Configuration class for data augmentation.
+    
+        Parameters:
+        apply_flip (bool): If True, apply random left-right flips to images.
+        apply_flip_up_down (bool): If True, apply random up-down flips to images.
+        apply_brightness (bool): If True, apply random brightness adjustments.
+        brightness_range (tuple): Range for brightness adjustment as (min, max).
+        apply_contrast (bool): If True, apply random contrast adjustments.
+        contrast_range (tuple): Range for contrast adjustment as (min, max).
+        apply_saturation (bool): If True, apply random saturation adjustments.
+        saturation_range (tuple): Range for saturation adjustment as (min, max).
+        apply_hue (bool): If True, apply random hue adjustments.
+        hue_delta (float): Max delta for hue adjustment.
+        apply_crop (bool): If True, apply random cropping to images.
+        crop_factor_range (tuple): Range for cropping factor as (min, max).
+        apply_noise (bool): If True, add Gaussian noise to images.
+        noise_std_range (tuple): Range for noise standard deviation as (min, max).
+        """
+    
+        def __init__(self, 
+                     apply_flip_left_right: bool = False, 
+                     apply_flip_up_down: bool = False,  # New parameter for up-down flipping
+                     apply_rotation: bool = False,
+                     rotation_range: int = 15,
+                     apply_brightness: bool = False, 
+                     brightness_delta: float = 0.15, 
+                     apply_contrast: bool = False, 
+                     contrast_range: tuple = (0.9, 1.1), 
+                     apply_saturation: bool = False,  # New parameter for saturation
+                     saturation_range: tuple = (0.9, 1.1),  # Range for saturation adjustment
+                     apply_hue: bool = False,  # New parameter for hue adjustment
+                     hue_delta: float = 0.1,  # Max delta for hue adjustment
+                     apply_crop: bool = False, 
+                     crop_factor_range: tuple = (0.9, 1.0), 
+                     apply_width_shift: bool = False,
+                     width_shift_range: float = 0.1,
+                     apply_height_shift: bool = False,
+                     width_height_range: float = 0.1,
+                     apply_noise: bool = False, 
+                     noise_std_range: tuple = (0.0, 0.01)):
             
-            #If contour is True
-            if contour:
-                x_aug = []
-                for i in tqdm(range(lenght)):
-                    aug_img = ImageProcessing.contour_mod(x[i] , density = 2)
-                    x_aug.append(aug_img)
-                x = np.asarray(x_aug)
-               
+            self.apply_flip_left_right = apply_flip_left_right
+            self.apply_flip_up_down = apply_flip_up_down
+            self.apply_rotation = apply_rotation
+            self.rotation_range = rotation_range
+            self.apply_brightness = apply_brightness
+            self.brightness_delta = brightness_delta
+            self.apply_contrast = apply_contrast
+            self.contrast_range = contrast_range
+            self.apply_saturation = apply_saturation
+            self.saturation_range = saturation_range
+            self.apply_hue = apply_hue
+            self.hue_delta = hue_delta
+            self.apply_crop = apply_crop      
+            self.crop_factor_range = crop_factor_range
+            self.apply_width_shift = apply_width_shift
+            self.width_shift_range = width_shift_range
+            self.apply_height_shift = apply_height_shift
+            self.height_shift_range = width_height_range
+            self.apply_noise = apply_noise
+            self.noise_std_range = noise_std_range  
+    
+        def __str__(self):
+            t = Texttable()
+            no_value = "----------"
+            t.add_rows([
+                ["Augmentation", 'Applied', 'Value'],
+                ['Horizontal flip', self.apply_flip_left_right, no_value],
+                ['Up-down flip', self.apply_flip_up_down, no_value],
+                ['Rotation', self.apply_rotation, str(self.rotation_range)],
+                ['Random brightness', self.apply_brightness, str(self.brightness_delta)],
+                ['Random contrast', self.apply_contrast, str(self.contrast_range)],
+                ['Random saturation', self.apply_saturation, str(self.saturation_range)],
+                ['Random hue', self.apply_hue, self.hue_delta],
+                ['Random crop', self.apply_crop, str(self.crop_factor_range)],
+                ['Width_shift', self.apply_width_shift, str(self.width_shift_range)],
+                ['Height_shift', self.apply_height_shift, str(self.height_shift_range)],
+                ['Random noise', self.apply_noise, str(self.noise_std_range)],
+            ])
+            return t.draw()
+    
+        def get_dict(self):
+            """
+            Returns a dictionary of applied augmentations and their parameters.
+            If an augmentation is not applied, it is excluded from the dictionary.
+            """
+            augmentations = {}
+            
+            if self.apply_flip_left_right:
+                augmentations['Horizontal flip'] = "No params needed"
                 
+            if self.apply_flip_up_down:
+                augmentations['Up-down flip'] = "No params needed"
+                
+            if self.apply_rotation:
+                augmentations['Rotation'] = self.rotation_range
+                
+            if self.apply_brightness:
+                augmentations['Random brightness'] = self.brightness_delta
+                
+            if self.apply_contrast:
+                augmentations['Random contrast'] = self.contrast_range
+                
+            if self.apply_saturation:
+                augmentations['Random saturation'] = self.saturation_range
+                
+            if self.apply_hue:
+                augmentations['Random hue'] = self.hue_delta
+                
+            if self.apply_crop:
+                augmentations['Random crop'] = self.crop_factor_range
+                
+            if self.apply_width_shift:
+                augmentations['Width shift'] = self.width_shift_range
+
+            if self.apply_height_shift:
+                augmentations['Height shift'] = self.height_shift_range
+                
+            if self.apply_noise:
+                augmentations['Random noise'] = self.noise_std_range
+                
+            return augmentations
+    
+    @tf.autograph.experimental.do_not_convert
+    def Augment_dataset(image, label, config=None):
+        # Set default config if none provided
+        if config is None:
+            config = DataSets.Augmentation_Config()
+    
+        # Random flip (left-right)
+        if config.apply_flip_left_right:
+            image = tf.image.random_flip_left_right(image)
+    
+        # Random flip (up-down)
+        if config.apply_flip_up_down:
+            image = tf.image.random_flip_up_down(image)
+            
+        # Random brightness
+        if config.apply_brightness:
+            delta = config.brightness_delta
+            # Use delta directly for brightness adjustment
+            image = tf.image.random_brightness(image, max_delta=delta)
+    
+        # Random contrast
+        if config.apply_contrast:
+            lower, upper = config.contrast_range
+            image = tf.image.random_contrast(image, lower=lower, upper=upper)
+    
+        # Random saturation
+        if config.apply_saturation:
+            lower, upper = config.saturation_range
+            image = tf.image.random_saturation(image, lower=lower, upper=upper)
+    
+        # Random hue
+        if config.apply_hue:
+            image = tf.image.random_hue(image, max_delta=config.hue_delta)
+    
+        # Random crop
+        if config.apply_crop:
+            # Generate a random crop factor within the specified range
+            factor = tf.random.uniform((), 
+                                       minval=config.crop_factor_range[0], 
+                                       maxval=config.crop_factor_range[1])
         
+            # Get dynamic shape of the image
+            size = tf.shape(image)
+            
+            # Cast size to float32 before multiplication
+            h = tf.cast(tf.cast(size[0], tf.float32) * factor, tf.int32)
+            w = tf.cast(tf.cast(size[1], tf.float32) * factor, tf.int32)
         
+            # Crop and resize
+            image = tf.image.random_crop(image, size=(h, w, 3))  # Assuming RGB images
+            image = tf.image.resize(image, (size[0], size[1]), method='bilinear')
+            
+        if config.apply_width_shift:
+            shift_w = tf.cast(tf.cast(tf.shape(image)[1], tf.float32) * config.width_shift_range, tf.int32)
+            direction_w = tf.random.uniform(shape=[], minval=0, maxval=2, dtype=tf.int32) * 2 - 1  # Random -1 or 1
+            shift_w = shift_w * direction_w
+            paddings = [[0, 0], [abs(shift_w), abs(shift_w)], [0, 0]]
+            
+            # Generate random boolean value
+            #random_values = tf.random.uniform(shape=[], minval=0, maxval=1)
+            #boolean_tensor = random_values > 0.5
+            
+            # Select padding mode based on the boolean value
+            #if boolean_tensor:  # True: Use reflect padding
+                #padded_image = tf.pad(image, paddings, mode='REFLECT')
+            #else:  # False: Use constant padding with black background
+            padded_image = tf.pad(image, paddings, mode='CONSTANT', constant_values=0)
+            
+            # Use tf.cond for offset_width
+            offset_width = tf.cond(shift_w < 0, lambda: abs(shift_w), lambda: tf.constant(0, dtype=tf.int32))
+            # Crop the image after padding
+            image = tf.image.crop_to_bounding_box(
+                padded_image, 
+                offset_height=0, 
+                offset_width = offset_width,
+                target_height=tf.shape(image)[0], 
+                target_width=tf.shape(image)[1]
+            )
+            
+        if config.apply_height_shift:
+            # Calculate shift for height
+            shift_h = tf.cast(tf.cast(tf.shape(image)[0], tf.float32) * config.height_shift_range, tf.int32)
+            direction_h = tf.random.uniform(shape=[], minval=0, maxval=2, dtype=tf.int32) * 2 - 1  # Random -1 or 1
+            shift_h = shift_h * direction_h
+            paddings = [[abs(shift_h), abs(shift_h)], [0, 0], [0, 0]]
+            
+            # Generate random boolean value
+            #random_values = tf.random.uniform(shape=[], minval=0, maxval=1)
+            #boolean_tensor = random_values > 0.5
+            
+            # Select padding mode based on the boolean value
+            #if boolean_tensor:  # True: Use reflect padding
+               # padded_image = tf.pad(image, paddings, mode='REFLECT')
+            #else:  # False: Use constant padding with black background
+            padded_image = tf.pad(image, paddings, mode='CONSTANT', constant_values=0)
+            
+            offset_height = tf.cond(shift_h < 0, lambda: abs(shift_h), lambda: tf.constant(0, dtype=tf.int32))
+
+            # Crop the image after padding
+            image = tf.image.crop_to_bounding_box(
+                padded_image, 
+                offset_height= offset_height,
+                offset_width=0, 
+                target_height=tf.shape(image)[0], 
+                target_width=tf.shape(image)[1]
+            )
+
+    
+        # Add noise
+        if config.apply_noise:
+            noise_std = tf.random.uniform(shape=[], 
+                                           minval=config.noise_std_range[0], 
+                                           maxval=config.noise_std_range[1])
+            noise = tf.random.normal(shape=tf.shape(image), mean=0.0, stddev=noise_std)
+            image = tf.clip_by_value(image + noise, 0.0, 1.0)
+    
+    
+        if config.apply_rotation:
+            # Convert angle from degrees to radians
+            angle = tf.random.uniform([], minval=-config.rotation_range, maxval=config.rotation_range)
+            radians = tf.convert_to_tensor(angle * (np.pi / 180), dtype=tf.float32)
+            
+            # Get image dimensions
+            height = tf.shape(image)[0]
+            width = tf.shape(image)[1]
+            channels =tf.shape(image)[2]
+            
         
-            x = np.concatenate((x, blank_class_x))
-            y = np.concatenate((y, blank_class_y))
+            # Compute the center of the image
+            center_x = tf.cast(width // 2, tf.float32)
+            center_y = tf.cast(height // 2, tf.float32)
         
-        return x , y
+            # Create a meshgrid of x and y coordinates
+            x_indices, y_indices = tf.meshgrid(tf.range(width), tf.range(height), indexing='xy')
+        
+            # Flatten the grid
+            x_indices = tf.reshape(x_indices, [-1])
+            y_indices = tf.reshape(y_indices, [-1])
+        
+            # Compute the rotation matrix components
+            cos_theta = tf.cos(radians)
+            sin_theta = tf.sin(radians)
+        
+            # Apply the inverse rotation to map the output image back to the input image
+            x_rotated = cos_theta * (tf.cast(x_indices, tf.float32) - center_x) + sin_theta * (tf.cast(y_indices, tf.float32) - center_y) + center_x
+            y_rotated = -sin_theta * (tf.cast(x_indices, tf.float32) - center_x) + cos_theta * (tf.cast(y_indices, tf.float32) - center_y) + center_y
+        
+            # Round and clip the rotated coordinates to the valid range
+            x_rotated = tf.cast(tf.round(x_rotated), tf.int32)
+            y_rotated = tf.cast(tf.round(y_rotated), tf.int32)
+        
+            # Ensure the coordinates are within bounds
+            x_rotated = tf.clip_by_value(x_rotated, 0, width - 1)
+            y_rotated = tf.clip_by_value(y_rotated, 0, height - 1)
+        
+            # Gather pixel values from the original image
+            indices = y_rotated * width + x_rotated
+            
+            reshaped_image = tf.reshape(image, [-1, channels])
+        
+            gathered_image = tf.gather(reshaped_image, indices)
+            image = tf.reshape(gathered_image,(height,width,channels))
+        
+        return image, label
+
+
+
+
+
     
 class ImageProcessing:
     
@@ -470,23 +925,107 @@ class ImageProcessing:
         else:
             return np.array(img/255 , dtype = img_type)
         
-    #Combined function of augmentation to use
-    def augment_image(image , rand_bright = False , gaussian = False , denoise = False , flip_rotate = False , contour = False   ):
-        
-        if rand_bright:
-            image = ImageProcessing.random_brightness(image)
-        if gaussian:
-            image = ImageProcessing.add_gaussian_noise(image , 0.3)
-        if denoise:
-            image = ImageProcessing.denoise_img(image)
-        if flip_rotate:
-            image = ImageProcessing.random_rotate_flip(image)
-        if contour:
-            image = ImageProcessing.contour_mod(image)
-            
-        return image        
+
+
+
+
+
+
+
+
+
 
 class General:
+    def extract_type(data_type):
+        # Extract the module and full class name
+        module_name = data_type.__module__
+        class_name = data_type.__name__
+        
+        # Construct and return the result
+        return f"{module_name}.{class_name}"
+ 
+    def save_function_as_string(func, save_path=None):
+        # Create an empty dictionary if func is None
+        if func is None:
+            empty_data = {}
+            # Save an empty JSON file if save_path is specified
+            if save_path is not None:
+                with open(save_path, "w") as json_file:
+                    json.dump(empty_data, json_file)  # Write an empty dictionary to the file
+            return empty_data
+        
+        # Get the source code of the function
+        function_code = inspect.getsource(func)
+        
+        # Create a dictionary to hold the function code
+        function_data = {
+            "function_name": func.__name__,
+            "function_code": function_code
+        }
+        
+        # Convert the dictionary to a JSON string
+        json_data = json.dumps(function_data, indent=4)
+        
+        # Save the JSON string to the specified file path if save_path is provided
+        if save_path is not None:
+            with open(save_path, "w") as json_file:
+                json_file.write(json_data)
+        
+        # Return the function code as a string
+        return function_code
+ 
+    
+    def save_custom_objects(model, custom_objects_path):
+        custom_objects = {}
+    
+        # Function to determine if the object is user-defined
+        def is_user_defined(obj):
+            # Check if the object is callable and does not belong to the standard TensorFlow/Keras module
+            return callable(obj) and not (obj.__module__.startswith('tensorflow.keras') or obj.__module__.startswith('keras'))
+    
+        # Detect custom layers and save only user-defined ones
+        for layer in model.layers:
+            if is_user_defined(layer.__class__):
+                custom_objects[layer.__class__.__name__] = inspect.getsource(layer.__class__)
+    
+        # Detect custom loss, metrics, and optimizer
+        if is_user_defined(model.loss):
+            custom_objects[model.loss.__name__] = inspect.getsource(model.loss)
+        if is_user_defined(model.optimizer):
+            custom_objects[model.optimizer.__class__.__name__] = inspect.getsource(model.optimizer)
+        for metric in model.metrics:
+            if is_user_defined(metric):
+                custom_objects[metric.__class__.__name__] = inspect.getsource(metric)
+    
+        # Serialize and save custom objects
+        if custom_objects_path is not None:
+            with open(custom_objects_path, "w") as f:
+                json.dump(custom_objects, f, indent=4)  # Use indent for better readability
+        else:
+            return custom_objects
+
+
+    
+    def load_custom_objects(custom_objects_path):
+        """Load custom objects from a JSON file."""
+        with open(custom_objects_path, "r") as f:
+            custom_objects_serialized = json.load(f)
+    
+        custom_objects = {}
+        exec_globals = globals().copy()
+        exec_globals.update({
+            'tf': tf,
+            'keras': tf.keras,
+            'Layer': tf.keras.layers.Layer,
+        })
+    
+        for name, source_code in custom_objects_serialized.items():
+            # Dynamically execute the source code to recreate the custom function or class
+            exec(source_code, exec_globals)
+            custom_objects[name] = eval(name, exec_globals)
+    
+        return custom_objects
+    
     def save_model_as_json(model, filename='model_architecture.json'):
         """
         Saves the model architecture as a JSON file.
@@ -672,7 +1211,7 @@ class General:
     
 
     
-    def Load_model_check_training_progress(model , train , epochs_to_train, model_weights_directory, model_history_directory):
+    def Load_model_check_training_progress(model , train , epochs_to_train, model_weights_directory, model_history_directory, custom_obj_directory):
         starting_epoch = None
         if train:
             try:
@@ -704,6 +1243,11 @@ class General:
                         print("Continuing model training")
                         print("Loading trained weights to model...")
                         model.load_weights(model_weights_directory)
+                        
+                        #Switch to the model loading and optimizer there is better continuity
+                        #Also maybe load custom functions so user does not have to define them every time
+                        
+                        
                         break
                     elif user_input.lower() =="n":
                         starting_epoch = 0
@@ -728,9 +1272,20 @@ class General:
             try:
                 print("Loading trained weights to model and its training history...")
                 Model_history = pd.read_csv(model_history_directory)
-                
-                model = tf.keras.models.load_model(model_weights_directory)
-                #model.load_weights(model_weights_directory)
+                #Trying to load model normally 
+                try:
+                    model = tf.keras.models.load_model(model_weights_directory)
+                    #model.load_weights(model_weights_directory)
+                    
+               #Trying to load model with custom objects
+                except:
+                    custom = General.load_custom_objects(custom_obj_directory)
+                    if len(custom) == 0:
+                        custom = None
+                    else:
+                        print("Loaded custom objects into the model:\n")
+                        print(custom)
+                    model = tf.keras.models.load_model(model_weights_directory,custom_objects=custom)
                 
                       
             except:
@@ -1107,7 +1662,95 @@ class General:
         return gen_img_list , inter_slider    
     
     
+class Optimized:
+        
+    @nb.njit
+    def calc_mean(x_train, DataType = np.float32):
+        """ Calculate mean of the entire dataset """
+        return np.mean(x_train)
     
+    @nb.njit
+    def calc_std(x_train, DataType = np.float32):
+        """ Calculate standard deviation of the entire dataset """
+        return np.std(x_train)
+    
+    @nb.njit
+    def calc_channel_mean(x_train, DataType = np.float32):
+        """ Calculate mean for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_mean = np.empty(channels, dtype=DataType)
+        for c in range(channels):
+            Channel_mean[c] = x_train[:, :, :, c].mean()
+        return Channel_mean
+    
+    @nb.njit
+    def calc_channel_std(x_train, DataType = np.float32):
+        """ Calculate standard deviation for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_std = np.empty(channels, dtype=DataType)
+        for c in range(channels):
+            Channel_std[c] = x_train[:, :, :, c].std()
+        return Channel_std
+    
+    @nb.njit
+    def calc_data_maximum(x_train, DataType = np.float32):
+        """ Calculate the maximum value in the dataset """
+        return np.array([np.max(x_train)], dtype=DataType)
+    
+    @nb.njit
+    def calc_data_minimum(x_train, DataType = np.float32):
+        """ Calculate the minimum value in the dataset """
+        return np.array([np.min(x_train)], dtype=DataType)
+    
+    @nb.njit
+    def calc_channel_data_minimum(x_train, DataType = np.float32):
+        """ Calculate the minimum value for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_data_minimum = np.empty(channels, dtype=DataType)
+        for c in range(channels):
+            Channel_data_minimum[c] = DataType(x_train[:, :, :, c].min())
+        return Channel_data_minimum
+    
+    @nb.njit
+    def calc_channel_data_maximum(x_train, DataType = np.float32):
+        """ Calculate the maximum value for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_data_maximum = np.empty(channels, dtype=DataType)
+        for c in range(channels):
+            Channel_data_maximum[c] = DataType(x_train[:, :, :, c].max())
+        return Channel_data_maximum
+    
+    @nb.njit
+    def calc_median(x_train, DataType = np.float32):
+        """ Calculate median of the entire dataset """
+        return DataType(np.median(x_train))
+    
+    @nb.njit
+    def calc_iqr(x_train, DataType = np.float32):
+        """ Calculate the interquartile range (IQR) of the dataset """
+        q1 = DataType(np.percentile(x_train, 25))
+        q3 = DataType(np.percentile(x_train, 75))
+        return q3 - q1
+    
+    @nb.njit
+    def calc_channel_median(x_train, DataType = np.float32):
+        """ Calculate median for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_median = np.empty(channels, dtype=DataType)
+        for c in range(channels):
+            Channel_median[c] = np.median(x_train[:, :, :, c])
+        return Channel_median
+    
+    @nb.njit
+    def calc_channel_iqr(x_train, DataType = np.float32):
+        """ Calculate the interquartile range (IQR) for each channel in the dataset """
+        _, _, _, channels = x_train.shape
+        Channel_IQR = np.empty(channels, dtype = DataType)
+        for c in range(channels):
+            q1 = np.percentile(x_train[:, :, :, c], 25)
+            q3 = np.percentile(x_train[:, :, :, c], 75)
+            Channel_IQR[c] = q3 - q1
+        return Channel_IQR    
     
     
     
